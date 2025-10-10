@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>인증번호 확인</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h2>인증번호 확인</h2>
+    <form id="verifyForm">
+      <input type="hidden" id="email" value="{{ email }}" />
+      <input type="text" id="code" placeholder="4자리 인증번호" maxlength="4" required />
+      <button type="submit">확인</button>
+    </form>
+    <p id="message"></p>
+  </div>
+
+  <script>
+    const form = document.getElementById("verifyForm");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value;
+      const code = document.getElementById("code").value;
+      const res = await fetch("/auth/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById("message").innerHTML =
+          `✅ ${data.message}<br><a href="${data.redirect_url}" target="_blank">ChatGPT로 이동</a>`;
+      } else {
+        document.getElementById("message").textContent = "❌ 인증번호가 올바르지 않습니다.";
+      }
+    });
+  </script>
+</body>
+</html>
