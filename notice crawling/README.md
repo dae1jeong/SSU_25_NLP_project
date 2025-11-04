@@ -22,6 +22,8 @@
 - 이미지 캡셔닝
 - 텍스트 청크 생성
 
+참고문서: https://bcho.tistory.com/1400
+https://devocean.sk.com/blog/techBoardDetail.do?ID=167446&boardType=techBlog
 
 - 벡터 임베딩 및 데이터베이스 구축
 - Vector Database (ChromaDB, Pinecone, Weaviate)
