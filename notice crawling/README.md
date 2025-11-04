@@ -2,12 +2,14 @@
 
 
 게시글 관련 정보 크롤링: SoongSil_University_Notice ~.ipynb
+
 결과: ssu_notices_2024_onwards.csv
 
 <img width="1384" height="314" alt="스크린샷 2025-11-04 191940" src="https://github.com/user-attachments/assets/e1521ca9-4367-4d86-829a-eea77e45cd23" />
 
 
 게시글 관련 정보 + 게시글의 세부사항까지 크롤링: notice_crawling.ipynb
+
 결과: ssu_rag_data_2025.jsonl
 
 실제 데이터 print
