@@ -56,15 +56,15 @@ https://devocean.sk.com/blog/techBoardDetail.do?ID=167446&boardType=techBlog
   게시글 본문의 속성명 추가: "cleaned_markdown"
 
 
-  (ex) 노이즈 제거 전: `"full_body_markdown": [**슈패스 신청기간: 11/3(월) ~ 21(금) ‘저자강연회’ 검색 후 신청*선착순마감**](https://path.ssu.ac.kr/)  ![](https://oasis.ssu.ac.kr/pyxis-api/attachments/BULLETIN/b076854e-4f68-44db-b559-6b05f0ea3a7f)] 안녕하세요. 중앙도서관입니다.\n\n ...`
+  (ex) ```노이즈 제거 전: "full_body_markdown": [**슈패스 신청기간: 11/3(월) ~ 21(금) ‘저자강연회’ 검색 후 신청*선착순마감**](https://path.ssu.ac.kr/)  ![](https://oasis.ssu.ac.kr/pyxis-api/attachments/BULLETIN/b076854e-4f68-44db-b559-6b05f0ea3a7f)] 안녕하세요. 중앙도서관입니다.\n\n ...
   
-       `노이즈 제거 후:  "cleaned_markdown": "안녕하세요. 중앙도서관입니다.\n\n ... ",
+       노이즈 제거 후:  "cleaned_markdown": "안녕하세요. 중앙도서관입니다.\n\n ... ",
                         "extra_links": [
                             {
                                 "text": "슈패스 신청기간: 11/3(월) ~ 21(금) ‘저자강연회’ 검색 후 신청선착순마감",
                                 "href": "https://path.ssu.ac.kr/"
                             }
-                        ] `
+                        ] ```
 
   
 - 이미지 캡셔닝 완료
@@ -83,16 +83,16 @@ https://devocean.sk.com/blog/techBoardDetail.do?ID=167446&boardType=techBlog
 
  ** 결과: ssu_rag_2025_v3.jsonl **
 
- (ex) 이미지 캡셔닝 전: "cleaned_markdown": ""
+ (ex) ```이미지 캡셔닝 전: "cleaned_markdown": ""
  
-      이미지 캡셔닝 후: `"cleaned_markdown": "### 이미지 분석 결과 ###
+      이미지 캡셔닝 후: "cleaned_markdown": "### 이미지 분석 결과 ###
                         다음은 이미지에서 추출된 정보이며, OCR을 통해 분석된 표, 일정, 날짜 등의 모든 데이터를 키:값 형태로 구조화한 것입니다.
                         
                         **공지사항 제목:** (재)전기공사공제조합장학회 2026년도 제21기 장학생 선발 공고
                         **공지 내용:** 전기산업의 미래를 이끌어갈 인재를 지원하기 위해 전기공사공제조합장학회가 장학생을 선발합니다.
                         **장학금 지원 성격:** 등록금 실비 지원 (등록금성장학금)
                         
-                        --- ..."`
+                        --- ..."```
 
  
   
