@@ -76,10 +76,10 @@ https://devocean.sk.com/blog/techBoardDetail.do?ID=167446&boardType=techBlog
   
   생성된 캡셔닝은 레코드의 cleaned_markdown 속성에 저장됨.
 
-  prompt_text = (
+  `prompt_text = (
                 "이 문서를 상세히 분석하여 표, 일정, 날짜 등 모든 정보를 OCR을 통해 추출하고 "
                 "키:값 형태로 구조화해 주세요. 이 이미지는 학교 공지사항 포스터입니다."
-            )
+            )`
 
  ** 결과: ssu_rag_2025_v3.jsonl **
 
