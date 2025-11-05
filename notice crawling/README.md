@@ -42,19 +42,23 @@ https://devocean.sk.com/blog/techBoardDetail.do?ID=167446&boardType=techBlog
 #### 3 게시글 내용 정제
 
 - 게시글 내용 재크롤링 (본문을 markdown 형식으로 저장하기 위해. html2markdown 라이브러리 사용)
-** 결과: ssu_rag_data_2025_v2.json1**
+** 결과: ssu_rag_data_2025_v2.json1 **
+  
   게시글 본문의 속성명 변경: "full_body_text" -> "full_body_markdown"
+  
   게시글 레코드: 1112개 (1112개 게시글)
 
 - 게시글 본문에서 노이즈 제거
   게시글 본문에 있는 링크들을 새 속성으로 추출 (문맥 이해에 방해되기 때문)
+  
   ** 결과: stage1_cleaned_data.jsonl **
+  
   게시글 본문의 속성명 추가: "cleaned_markdown"
 
 
   (ex) 노이즈 제거 전: `"full_body_markdown": [**슈패스 신청기간: 11/3(월) ~ 21(금) ‘저자강연회’ 검색 후 신청*선착순마감**](https://path.ssu.ac.kr/)  ![](https://oasis.ssu.ac.kr/pyxis-api/attachments/BULLETIN/b076854e-4f68-44db-b559-6b05f0ea3a7f)] 안녕하세요. 중앙도서관입니다.\n\n ...`
   
-       노이즈 제거 후:  `"cleaned_markdown": "안녕하세요. 중앙도서관입니다.\n\n ... ",
+       `노이즈 제거 후:  "cleaned_markdown": "안녕하세요. 중앙도서관입니다.\n\n ... ",
                         "extra_links": [
                             {
                                 "text": "슈패스 신청기간: 11/3(월) ~ 21(금) ‘저자강연회’ 검색 후 신청선착순마감",
@@ -65,8 +69,11 @@ https://devocean.sk.com/blog/techBoardDetail.do?ID=167446&boardType=techBlog
   
 - 이미지 캡셔닝 완료
   게시글 본문이 없고 이미지만 있는 공지사항이 존재.
+  
   노이즈 제거된 게시글 본문의 글자수 < 50 이면 이미지 캡셔닝 진행.
+  
   gemini API를 통해 gemini flash를 불러 해당 게시글의 모든 이미지 url과 다음 프롬프트를 주어 이미지 캡셔닝함.
+  
   생성된 캡셔닝은 레코드의 cleaned_markdown 속성에 저장됨.
 
   prompt_text = (
@@ -77,6 +84,7 @@ https://devocean.sk.com/blog/techBoardDetail.do?ID=167446&boardType=techBlog
  ** 결과: ssu_rag_2025_v3.jsonl **
 
  (ex) 이미지 캡셔닝 전: "cleaned_markdown": ""
+ 
       이미지 캡셔닝 후: `"cleaned_markdown": "### 이미지 분석 결과 ###
                         다음은 이미지에서 추출된 정보이며, OCR을 통해 분석된 표, 일정, 날짜 등의 모든 데이터를 키:값 형태로 구조화한 것입니다.
                         
