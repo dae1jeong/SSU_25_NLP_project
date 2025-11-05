@@ -265,6 +265,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# 이 스크립트가 직접 실행될 때만 main() 함수를 호출
-if __name__ == "__main__":
-    main()
+
