@@ -1,8 +1,8 @@
 import sqlite3
 import re
 import csv
-import json  # .jsonl 파일을 읽기 위해 import
-import os    # 파일 경로를 안전하게 다루기 위해 import
+import json   # .jsonl 파일을 읽기 위해 import
+import os     # 파일 경로를 안전하게 다루기 위해 import
 from datetime import datetime
 
 # --- 1단계: 데이터베이스 초기 설정 ---
@@ -196,24 +196,52 @@ def main():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     
     
-    # --- 강의평 처리 ---
+    # --- 강의평 처리 (자동화된 방식) ---
     print("\n2. 강의평 데이터 처리 시작...")
-    review_folder = "everytime_crawling"  # (수정) 띄어쓰기 제거
-    review_csv_file = "reviews_시스템프로그래밍_이은지.csv"
-    review_file_path = os.path.join(BASE_DIR, review_folder, review_csv_file)
-    
-    # 파일명에서 과목명, 교수명 추출
+    review_folder_name = "everytime_crawling"
+    review_folder_path = os.path.join(BASE_DIR, review_folder_name)
+
+    # 최종적으로 DB에 저장할 모든 강의평을 담을 '큰' 리스트
+    all_processed_reviews_list = [] 
+
     try:
-        parts = review_csv_file.replace("reviews_", "").replace(".csv", "").split('_')
-        subject_name = parts[0]
-        professor_name = parts[1]
-    except Exception:
-        subject_name, professor_name = "시스템프로그래밍", "이은지" # 실패 시 기본값
-        
-    raw_reviews = load_review_data_from_csv(review_file_path)
-    processed_reviews_list = []
-    if raw_reviews:
-        processed_reviews_list = process_reviews(raw_reviews, subject_name, professor_name)
+        # 1. 'everytime_crawling' 폴더 안의 모든 파일 목록을 가져옴
+        all_files = os.listdir(review_folder_path)
+    except FileNotFoundError:
+        print(f" -> [에러] 강의평 폴더를 찾을 수 없습니다: {review_folder_path}")
+        all_files = [] # 에러가 나도 멈추지 않고, 빈 리스트로 다음 단계 진행
+
+    # 2. 모든 파일을 순회하며 CSV 파일만 골라서 처리
+    for filename in all_files:
+        # 파일이 "reviews_"로 시작하고 ".csv"로 끝나는지 확인
+        if filename.startswith("reviews_") and filename.endswith(".csv"):
+            
+            print(f"\n   --- '{filename}' 처리 중 ---")
+            review_file_path = os.path.join(review_folder_path, filename)
+            
+            # 3. 파일명에서 과목명, 교수명 동적 추출
+            try:
+                # "reviews_"와 ".csv" 부분을 제거하고 '_'로 분리
+                parts = filename.replace("reviews_", "").replace(".csv", "").split('_')
+                subject_name = parts[0]
+                professor_name = parts[1]
+                print(f" -> 과목: {subject_name}, 교수: {professor_name}")
+            except Exception as e:
+                print(f" -> [경고] 파일명 파싱 오류: {filename} (오류: {e}). '알 수 없음'으로 대체합니다.")
+                subject_name, professor_name = "알 수 없음", "알 수 없음" # 실패 시 기본값
+                
+            # 4. 개별 파일 로딩
+            raw_reviews = load_review_data_from_csv(review_file_path)
+            
+            if raw_reviews:
+                # 5. 개별 파일 처리
+                processed_reviews = process_reviews(raw_reviews, subject_name, professor_name)
+                # 6. 처리된 결과를 '큰' 리스트에 추가 (extend 사용)
+                all_processed_reviews_list.extend(processed_reviews)
+
+    print(f"\n -> [OK] 총 {len(all_processed_reviews_list)}건의 강의평 데이터를 성공적으로 처리했습니다.")
+    # --- 강의평 처리 끝 ---
+
 
     # --- 공지사항 처리 ---
     print("\n3. 공지사항 데이터 처리 시작...")
@@ -228,7 +256,8 @@ def main():
     
     # --- 최종 저장 ---
     print("\n4. 데이터베이스에 최종 저장...")
-    save_data_to_db(db_path, processed_reviews_list, processed_notices_list)
+    # (수정) all_processed_reviews_list를 전달
+    save_data_to_db(db_path, all_processed_reviews_list, processed_notices_list)
     
     print("\n[모든 작업 완료]")
 
