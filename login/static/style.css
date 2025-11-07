@@ -1,0 +1,89 @@
+/* 기본 설정 */
+:root {
+    --primary-color: #33CCFF; /* 궁금했슈 파란색 */
+    --background-color: #FFFFFF; /* 흰색 배경 */
+    --font-color: #333333; /* 기본 글씨색 */
+}
+
+/* 1. 전체 레이아웃 및 폰트 */
+body {
+    background-color: var(--background-color);
+    font-family: 'Arial', sans-serif;
+    color: var(--font-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+/* 2. 컨테이너: 폼 영역 */
+.auth-container {
+    width: 100%;
+    max-width: 400px; /* 적당한 크기로 제한 */
+    padding: 30px;
+    background-color: var(--background-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); /* 그림자 효과로 입체감 부여 */
+}
+
+/* 3. 헤더: 서비스 이름 꾸미기 */
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid var(--primary-color); /* 파란색으로 헤더 밑줄 강조 */
+}
+
+.service-name {
+    font-size: 28px;
+    color: var(--primary-color);
+    font-weight: bold;
+    margin: 0;
+}
+
+/* 4. 폼 요소 스타일링 */
+form label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #555;
+    font-size: 14px;
+}
+
+form input[type="email"], 
+form input[type="text"] {
+    width: 100%;
+    padding: 12px 10px;
+    margin-bottom: 20px;
+    border: 1px solid #DDDDDD;
+    border-radius: 6px;
+    box-sizing: border-box; /* 패딩이 전체 너비에 포함되도록 설정 */
+    font-size: 16px;
+}
+
+/* 5. 버튼 스타일링 (파란색 포인트) */
+button[type="submit"] {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--primary-color); /* 파란색 배경 */
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+button[type="submit"]:hover {
+    background-color: #1A9DCF; /* 살짝 어두운 파란색으로 호버 효과 */
+}
+
+/* 6. 메시지 스타일링 */
+#message, p {
+    text-align: center;
+    margin-top: 15px;
+    font-size: 14px;
+    color: #888;
+}

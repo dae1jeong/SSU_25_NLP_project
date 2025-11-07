@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>궁금했슈(SSU) - 인증번호 입력</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="header">
+            <h1 class="service-name">궁금했슈(SSU)</h1>
+            <p>인증번호 입력</p>
+        </div>
+
+        <p><strong>{{ email }}</strong>로 발송된 6자리 인증번호를 입력해주세요.</p>
+
+        <form action="/auth/verify-code" method="post">
+            <input type="hidden" name="email" value="{{ email }}"> 
+
+            <label for="code">인증번호:</label>
+            <input type="text" id="code" name="code" required maxlength="6">
+            
+            <button type="submit">인증 확인</button>
+        </form>
+    </div>
+    </body>
+</html>
