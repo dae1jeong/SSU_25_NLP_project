@@ -5,6 +5,8 @@ from .utils import generate_code, send_verification_email
 from motor.motor_asyncio import AsyncIOMotorClient
 import os, datetime
 from dotenv import load_dotenv # 환경 변수 로드를 확실히 하기 위해 추가
+from .models import ChatRequest # ChatRequest가 없으면 빨간줄 뜸
+from .utils import get_hybrid_answer
 
 # .env 파일을 로드합니다.
 load_dotenv()
@@ -83,3 +85,19 @@ async def verify_code(email: str = Form(...), code: str = Form(...)):
 
     # 4. 최종 목적지(성공 페이지)로 리디렉션
     return RedirectResponse("https://chat.openai.com", status_code=status.HTTP_303_SEE_OTHER)
+
+
+
+
+
+
+
+
+#챗봇 질문 api
+@router.post("/ask")
+async def ask_chatbot(request: ChatRequest):
+    """
+    챗봇에게 질문을 보냅니다. (로그인 필요 없음 - 필요시 추가 가능)
+    """
+    response = get_hybrid_answer(request.question)
+    return {"answer": response}

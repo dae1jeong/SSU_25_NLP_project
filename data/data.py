@@ -4,24 +4,41 @@
 
 
 
+# ==============================================================================
+# SSU_25_NLP_project - data.py (v5.1 - 최종 완성본)
+#
+# [개요]
+# 이 스크립트는 챗봇의 '장기 기억(Long-term Memory)'이 될 원본 데이터베이스를 구축하는
+# ETL(Extract, Transform, Load) 파이프라인의 핵심 코드입니다.
+# 흩어져 있는 JSONL 데이터 파일들을 읽어와 정제한 뒤, 하나의 SQLite DB로 통합합니다.
+#
+# [처리 대상 데이터]
+# 1. 강의평 (Lecture Reviews):
+#    - 파일: everytime_crawling/et_reviews_최종.jsonl
+#    - 내용: 과목명, 교수명, 별점, 수강 학기, 강의평 텍스트
+# 2. 공지사항 (Notices):
+#    - 파일: notice crawling/image_captioned/ssu_rag_data_2025_v3.jsonl
+#    - 내용: 공지 제목, 카테고리, 학과, 날짜, 본문(이미지 OCR 포함 Markdown)
+# 3. 동아리 (Clubs):
+#    - 파일: everytime_crawling/everytime_crawling_club.jsonl
+#    - 내용: 동아리명(title), 소개글(all_text), 원본 링크
+#
+# [실행 결과]
+# - 'ssu_chatbot_data.db' 파일이 생성됩니다. (SQLite)
+# - 이 DB는 이후 'vector_db.py'와 'build_bm25.py'에서 검색 인덱스를 만드는 데 사용됩니다.
+# ==============================================================================
+
 import sqlite3
-import re
-import csv
-import json   # .jsonl 파일을 읽기 위해 import
-import os     # 파일 경로를 안전하게 다루기 위해 import
-from datetime import datetime
+import json
+import os
 import pandas as pd
 
 # --- 1단계: 데이터베이스 초기 설정 ---
 def init_database(db_name="ssu_chatbot_data.db"):
-    """
-    데이터베이스 파일을 생성하고,
-    [lecture_reviews] 테이블과 [notices] 테이블을 생성합니다.
-    """
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     
-    # (기존) 강의평 테이블 생성
+    # 1. 강의평
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS lecture_reviews (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +51,7 @@ def init_database(db_name="ssu_chatbot_data.db"):
         )
     ''')
     
-    # (수정) 공지사항 테이블에 'department' 컬럼 추가
+    # 2. 공지사항
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS notices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,26 +61,35 @@ def init_database(db_name="ssu_chatbot_data.db"):
             status TEXT,
             full_body_text TEXT,
             link TEXT UNIQUE,
-            department TEXT, -- (NLU 필터링을 위한 학과 정보)
+            department TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 3. 동아리
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS clubs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            club_name TEXT,
+            category TEXT,
+            description TEXT,
+            recruitment_info TEXT,
+            source_url TEXT UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
     conn.commit()
     conn.close()
-    print(f" -> 데이터베이스 '{db_name}' 및 2개 테이블 준비 완료 (notices.department 컬럼 추가됨)")
+    print(f" -> 데이터베이스 '{db_name}' 및 3개 테이블 준비 완료")
 
 # --- 2단계: 데이터 로딩 함수 ---
 def load_data_from_jsonl(file_path):
-    """
-    (범용) .jsonl 파일에서 데이터를 읽어옵니다.
-    (강의평, 공지사항 모두 이 함수를 사용)
-    """
     raw_data = []
     try:
         with open(file_path, mode='r', encoding='utf-8') as f:
             for line in f:
-                if line.strip(): # 빈 줄이 아니면
+                if line.strip():
                     raw_data.append(json.loads(line))
         print(f" -> [OK] JSONL 로딩 완료: {file_path}")
         return raw_data
@@ -77,107 +103,136 @@ def load_data_from_jsonl(file_path):
 # --- 3단계: 데이터 정제(Processing) 함수 ---
 
 def process_reviews(raw_data):
-    """
-    (강의평 수정) 
-    'et_reviews_최종.jsonl'의 키(key)에 맞게 수정합니다.
-    """
     processed_list = []
     for review in raw_data:
         try:
-            cleaned_star = float(review['review_star'])
-            cleaned_semester = review['review_semester'].replace(' 수강자', '').strip()
-            cleaned_text = review['review_text'].strip()
+            cleaned_star = float(review.get('review_star', 0))
+            cleaned_semester = str(review.get('review_semester', '')).replace(' 수강자', '').strip()
+            cleaned_text = str(review.get('review_text', '')).strip()
 
             professor_name = review.get('professor')
             if not professor_name or pd.isna(professor_name):
                 professor_name = "정보 없음"
             else:
-                professor_name = professor_name.strip()
+                professor_name =str(professor_name).strip()
 
             if cleaned_text:
                 processed_list.append({
-                    'subject_name': review['course_name'].strip(),
+                    'subject_name': str(review.get('course_name', '')).strip(),
                     'professor_name': professor_name,
                     'star_rating': cleaned_star,
                     'semester': cleaned_semester,
                     'review_text': cleaned_text
                 })
-        except KeyError as e:
-            print(f" -> [처리 오류] 강의평 JSONL 키(key) 오류: {e}. (해당 row 무시)")
-        except Exception as e:
-            print(f" -> [처리 오류] 강의평 데이터: {e}, {review} (해당 row 무시)")
-            
-    print(f" -> [OK] 강의평 {len(processed_list)}건 처리 완료")
+        except Exception:
+            pass
     return processed_list
 
 def process_notices(raw_data):
-    """
-    (공지사항 수정) 
-    v3.jsonl에서 'department' 키를 추가로 추출합니다.
+    processed_list = []
+    for item in raw_data:
+        try:
+            status_value = item.get('status') or '정보 없음'
+            department_value = item.get('department') or '정보 없음'
+
+            processed_list.append({
+                'title': str(item.get('post_title', '')).strip(),
+                'category': str(item.get('category', '')),
+                'post_date': str(item.get('posted_date', '')),
+                'status': str(status_value),
+                'full_body_text': str(item.get('cleaned_markdown', '')).strip(),
+                'link': str(item.get('source_url', '')),
+                'department': str(department_value)
+            })
+        except Exception:
+            pass
+    return processed_list
+
+def process_clubs(raw_data):
+    """ 
+    (수정됨 v5.3) 동아리 데이터 정제 
+    - 값이 None일 경우 안전하게 처리 (.strip() 오류 방지)
+    - title이 없으면 '제목 없음'으로 처리
     """
     processed_list = []
     for item in raw_data:
         try:
-            status_value = item.get('status', '정보 없음') 
-            department_value = item.get('department', '정보 없음') # (수정) department 키 추출
+            # 1. 데이터 추출 (None이면 빈 문자열로 변환 후 strip)
+            raw_title = item.get('title')
+            club_name = str(raw_title).strip() if raw_title else "제목 없음"
+            
+            raw_desc = item.get('all_text')
+            description = str(raw_desc).strip() if raw_desc else ""
+            
+            raw_url = item.get('url')
+            url = str(raw_url).strip() if raw_url else ""
+            
+            unique_id = str(item.get('id', ''))
+            
+            # 2. URL 생성
+            if url and unique_id:
+                unique_url = f"{url}#{unique_id}"
+            elif unique_id:
+                unique_url = f"club_id_{unique_id}"
+            else:
+                unique_url = f"club_{hash(description)}"
 
-            processed_list.append({
-                'title': item['post_title'].strip(),
-                'category': item['category'],
-                'post_date': item['posted_date'],
-                'status': status_value,
-                'full_body_text': item['cleaned_markdown'].strip(),
-                'link': item['source_url'],
-                'department': department_value # (수정) department 값 추가
-            })
-        except KeyError as e:
-            print(f" -> [처리 오류] 공지사항 JSONL 키(key) 불일치: {e}. (해당 item 무시)")
+            category = '동아리' 
+
+            if description: 
+                processed_list.append({
+                    'club_name': club_name,
+                    'category': category,
+                    'description': description,
+                    'recruitment_info': '', 
+                    'source_url': unique_url
+                })
         except Exception as e:
-            print(f" -> [처리 오류] 공지사항 데이터: {e}, {item} (해당 item 무시)")
-    
-    print(f" -> [OK] 공지사항 {len(processed_list)}건 처리 완료")
+            # 오류가 나도 멈추지 않고 출력만 함
+            print(f"동아리 처리 중 오류 (무시됨): {e}")
+            pass
+            
+    print(f" -> [OK] 동아리 {len(processed_list)}건 처리 완료")
     return processed_list
 
 # --- 4단계: 데이터베이스에 저장하는 함수 ---
-def save_data_to_db(db_name, processed_reviews, processed_notices):
-    """
-    정제된 강의평과 공지사항 데이터를 각각의 테이블에 저장합니다.
-    """
+def save_data_to_db(db_name, processed_reviews, processed_notices, processed_clubs):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
     
     try:
-        # (기존) 강의평 저장
+        # 1. 강의평 저장
+        count_reviews = 0
         for review in processed_reviews:
             cursor.execute("""
                 INSERT OR IGNORE INTO lecture_reviews 
                 (subject_name, professor_name, star_rating, semester, review_text) 
                 VALUES (?, ?, ?, ?, ?)
-            """, (
-                review['subject_name'],
-                review['professor_name'],
-                review['star_rating'],
-                review['semester'],
-                review['review_text']
-            ))
+            """, (review['subject_name'], review['professor_name'], review['star_rating'], review['semester'], review['review_text']))
+            if cursor.rowcount > 0: count_reviews += 1
             
-        # (수정) 공지사항 저장 (department 추가)
+        # 2. 공지사항 저장
+        count_notices = 0
         for notice in processed_notices:
             cursor.execute("""
                 INSERT OR IGNORE INTO notices 
                 (title, category, post_date, status, full_body_text, link, department) 
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                notice['title'],
-                notice['category'],
-                notice['post_date'],
-                notice['status'],
-                notice['full_body_text'],
-                notice['link'],
-                notice['department'] # (수정) department 값 저장
-            ))
+            """, (notice['title'], notice['category'], notice['post_date'], notice['status'], notice['full_body_text'], notice['link'], notice['department']))
+            if cursor.rowcount > 0: count_notices += 1
+
+        # 3. 동아리 저장
+        count_clubs = 0
+        for club in processed_clubs:
+            cursor.execute("""
+                INSERT OR IGNORE INTO clubs 
+                (club_name, category, description, recruitment_info, source_url) 
+                VALUES (?, ?, ?, ?, ?)
+            """, (club['club_name'], club['category'], club['description'], club['recruitment_info'], club['source_url']))
+            if cursor.rowcount > 0: count_clubs += 1
         
         conn.commit()
+        print(f" -> [저장 완료] 강의평: {count_reviews}건, 공지: {count_notices}건, 동아리: {count_clubs}건")
         print(" -> [OK] 모든 데이터를 데이터베이스에 저장 완료")
         
     except Exception as e:
@@ -189,44 +244,32 @@ def save_data_to_db(db_name, processed_reviews, processed_notices):
 # --- 5단계: 전체 파이프라인 실행 ---
 def main():
     db_path = "ssu_chatbot_data.db"
-    
     print("1. 데이터베이스 초기화 시작...")
     init_database(db_path)
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     
-    # --- 강의평 처리 (JSONL 파일로 수정) ---
+    # 1. 강의평 처리
     print("\n2. 강의평 데이터 처리 시작...")
-    review_folder_name = "everytime_crawling"
-    review_jsonl_file = "et_reviews_최종.jsonl" # (수정) JSONL 파일 지정
-    review_file_path = os.path.join(BASE_DIR, review_folder_name, review_jsonl_file)
+    review_file = os.path.join(BASE_DIR, "everytime_crawling", "et_reviews_최종.jsonl")
+    raw_reviews = load_data_from_jsonl(review_file)
+    reviews_list = process_reviews(raw_reviews) if raw_reviews else []
     
-    # (수정) 범용 JSONL 로더 사용
-    raw_reviews = load_data_from_jsonl(review_file_path)
-    
-    all_processed_reviews_list = []
-    if raw_reviews:
-        all_processed_reviews_list = process_reviews(raw_reviews)
-    
-    print(f"\n -> [OK] 총 {len(all_processed_reviews_list)}건의 강의평 데이터를 성공적으로 처리했습니다.")
-    # --- 강의평 처리 끝 ---
-
-
-    # --- 공지사항 처리 (v3 JSONL 경로) ---
+    # 2. 공지사항 처리
     print("\n3. 공지사항 데이터 처리 시작...")
-    notice_folder = "notice crawling"
-    notice_subfolder = "image_captioned"
-    notice_jsonl_file = "ssu_rag_data_2025_v3.jsonl" 
-    notice_file_path = os.path.join(BASE_DIR, notice_folder, notice_subfolder, notice_jsonl_file)
+    notice_file = os.path.join(BASE_DIR, "notice crawling", "image_captioned", "ssu_rag_data_2025_v3.jsonl")
+    raw_notices = load_data_from_jsonl(notice_file)
+    notices_list = process_notices(raw_notices) if raw_notices else []
+
+    # 3. 동아리 처리
+    print("\n4. 동아리 데이터 처리 시작...")
+    club_file = os.path.join(BASE_DIR, "everytime_crawling", "everytime_crawling_club.jsonl") 
+    raw_clubs = load_data_from_jsonl(club_file)
+    clubs_list = process_clubs(raw_clubs) if raw_clubs else []
     
-    raw_notices = load_data_from_jsonl(notice_file_path) 
-    processed_notices_list = []
-    if raw_notices:
-        processed_notices_list = process_notices(raw_notices)
-    
-    # --- 최종 저장 ---
-    print("\n4. 데이터베이스에 최종 저장...")
-    save_data_to_db(db_path, all_processed_reviews_list, processed_notices_list)
+    # 4. 최종 저장
+    print("\n5. 데이터베이스에 최종 저장...")
+    save_data_to_db(db_path, reviews_list, notices_list, clubs_list)
     
     print("\n[모든 작업 완료]")
 
