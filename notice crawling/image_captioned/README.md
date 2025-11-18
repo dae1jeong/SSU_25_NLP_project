@@ -10,7 +10,7 @@ source_url, post_title, category, department, views, posted_date, full_body_mark
 - category: 게시글의 카테고리
 - department: 게시글을 올린 부서
 - views: 조회수 (크롤링 당시)
-- posted_date: 게시글을 올린 날짜
+- posted_date: 게시글을 올린 날짜 (iso 타입 2025-10-11이므로 DATE 타입으로 취급할 수 있음.) 
 - full_body_markdown: 정제 전 게시글 본문 -> 사실상 필요 없음. cleaned_markdown으로 대체.
 - **cleaned_markdown: 게시글 본문 (정제 후)**
 - image_urls: 게시글에 첨부된 이미지 url
