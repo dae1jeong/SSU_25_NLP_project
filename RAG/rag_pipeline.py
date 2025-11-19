@@ -21,6 +21,9 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 import numpy as np
 
+# 🌟 Kiwipiepy import 추가
+from kiwipiepy import Kiwi
+
 # ------------------------------------------------------------------
 # !! 여기 중요 !!
 # RAG 폴더 기준으로 한 칸 올라가서 루트의 DB를 바라보게 함
@@ -242,13 +245,47 @@ def load_all_docs() -> List[Document]:
 # 3. BM25 1차 검색기
 # =========================
 
+# 🌟 Kiwi 객체를 전역 또는 클래스 레벨에서 초기화 (단 한 번만 로딩)
+
+try:
+    KIWI_PROCESSOR = Kiwi()
+except Exception as e:
+    print(f"[ERROR] Kiwi 객체 초기화 실패: {e}")
+    KIWI_PROCESSOR = None # 실패 시 fallback 처리
+
 def simple_tokenize(text: str) -> List[str]:
     """
-    아주 단순한 토크나이저 (공백 기준).
-    나중에 kiwipiepy, Mecab 등으로 교체해도 됨.
+    Kiwipiepy 형태소 분석기를 사용하여 한국어에 특화된 토크나이징.
+    **UnicodeDecodeError 방지를 위한 전처리 추가.**
     """
-    return text.strip().split()
+    if not KIWI_PROCESSOR:
+        return text.strip().split()
 
+    # 🌟🌟🌟 오류 방지를 위한 핵심 전처리 🌟🌟🌟
+    # 1. 텍스트가 None이 아닌지 확인하고 str로 변환
+    text = str(text or "").strip()
+    
+    # 2. 유니코드 오류가 있는 경우 강제로 무시하고 클린 텍스트 생성
+    try:
+        # 대부분의 한국어 데이터는 'utf-8'이므로, 인코딩/디코딩 과정을 거쳐 오류 문자 제거
+        clean_text = text.encode('utf-8', 'ignore').decode('utf-8')
+    except Exception:
+        # 혹시 모를 예외 발생 시 원본 텍스트 사용
+        clean_text = text
+
+    if not clean_text:
+        return []
+    # 🌟🌟🌟 전처리 종료 🌟🌟🌟
+    
+
+    tokens: List[str] = []
+    
+    # 🌟 clean_text 사용
+    for token in KIWI_PROCESSOR.tokenize(clean_text, normalize_coda=True):
+        if token.tag.startswith(('N', 'V', 'M', 'SL', 'SN')):
+            tokens.append(token.form)
+            
+    return tokens
 
 class BM25Retriever:
     def __init__(self, docs: List[Document]):
@@ -278,7 +315,7 @@ class VectorReranker:
     """
     def __init__(
         self,
-        model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        model_name: str = "jhgan/ko-sroberta-multitask",
     ):
         self.model = SentenceTransformer(model_name)
 
