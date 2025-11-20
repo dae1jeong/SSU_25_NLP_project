@@ -16,13 +16,15 @@ from typing import List, Dict, Optional, Callable
 import sqlite3
 import math
 import os
+import sys
+import unicodedata  # Mac 오류 해결용
 
+import numpy as np
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
-import numpy as np
-
-# 🌟 Kiwipiepy import 추가
 from kiwipiepy import Kiwi
+from openai import OpenAI
+from dotenv import load_dotenv
 
 # ------------------------------------------------------------------
 # !! 여기 중요 !!
@@ -41,6 +43,16 @@ os.environ["SENTENCE_TRANSFORMERS_HOME"] = HF_CACHE_DIR
 print("[RAG] Using DB_PATH =", DB_PATH)
 print("[RAG] Using HF cache dir =", HF_CACHE_DIR)
 
+# .env 파일 로드 (API 키 보안)
+env_path = os.path.join(ROOT_DIR, ".env")
+print(f"[RAG] Loading .env from: {env_path}") # 경로 확인용 로그
+
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    print("[RAG] .env 파일 로드 성공")
+else:
+    print("[RAG] 🚨 경고: .env 파일을 찾을 수 없습니다!")
+
 # =========================
 # 1. Document 스키마 정의
 # =========================
@@ -58,20 +70,6 @@ class Document:
 # =========================
 
 def load_notices() -> List[Document]:
-    """
-    notices 테이블에서 공지 데이터를 읽어와 Document 리스트로 변환.
-    스키마는 data/data.py 기준:
-
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        category TEXT,
-        post_date DATE,
-        status TEXT,
-        full_body_text TEXT,
-        link TEXT UNIQUE,
-        department TEXT,
-        created_at TIMESTAMP ...
-    """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
@@ -120,18 +118,6 @@ def load_notices() -> List[Document]:
 
 
 def load_reviews() -> List[Document]:
-    """
-    lecture_reviews 테이블에서 강의평 데이터를 읽어와 Document 리스트로 변환.
-    스키마:
-
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        subject_name TEXT,
-        professor_name TEXT,
-        star_rating REAL,
-        semester TEXT,
-        review_text TEXT UNIQUE,
-        created_at TIMESTAMP ...
-    """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
@@ -174,18 +160,6 @@ def load_reviews() -> List[Document]:
 
 
 def load_clubs() -> List[Document]:
-    """
-    clubs 테이블에서 동아리 데이터를 읽어와 Document 리스트로 변환.
-    스키마:
-
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        club_name TEXT,
-        category TEXT,
-        description TEXT,
-        recruitment_info TEXT,
-        source_url TEXT UNIQUE,
-        created_at TIMESTAMP ...
-    """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
@@ -228,9 +202,6 @@ def load_clubs() -> List[Document]:
 
 
 def load_all_docs() -> List[Document]:
-    """
-    공지 + 강의평 + 동아리 Document를 한 번에 로딩.
-    """
     notices = load_notices()
     reviews = load_reviews()
     clubs = load_clubs()
@@ -245,13 +216,11 @@ def load_all_docs() -> List[Document]:
 # 3. BM25 1차 검색기
 # =========================
 
-# 🌟 Kiwi 객체를 전역 또는 클래스 레벨에서 초기화 (단 한 번만 로딩)
-
 try:
     KIWI_PROCESSOR = Kiwi()
 except Exception as e:
     print(f"[ERROR] Kiwi 객체 초기화 실패: {e}")
-    KIWI_PROCESSOR = None # 실패 시 fallback 처리
+    KIWI_PROCESSOR = None 
 
 def simple_tokenize(text: str) -> List[str]:
     """
@@ -259,39 +228,47 @@ def simple_tokenize(text: str) -> List[str]:
     **UnicodeDecodeError 방지를 위한 전처리 추가.**
     """
     if not KIWI_PROCESSOR:
-        return text.strip().split()
+        return str(text or "").strip().split()
 
-    # 🌟🌟🌟 오류 방지를 위한 핵심 전처리 🌟🌟🌟
-    # 1. 텍스트가 None이 아닌지 확인하고 str로 변환
-    text = str(text or "").strip()
+    # 🌟🌟🌟 1. 방어 코드: 입력값이 없으면 빈 리스트 반환 🌟🌟🌟
+    if not text:
+        return []
     
-    # 2. 유니코드 오류가 있는 경우 강제로 무시하고 클린 텍스트 생성
+    text = str(text).strip()
+
+    # 🌟🌟🌟 2. Mac 호환성: 유니코드 정규화 (이게 없으면 에러남) 🌟🌟🌟
+    text = unicodedata.normalize('NFC', text)
+    
+    # 3. 유니코드 오류가 있는 경우 강제로 무시하고 클린 텍스트 생성
     try:
-        # 대부분의 한국어 데이터는 'utf-8'이므로, 인코딩/디코딩 과정을 거쳐 오류 문자 제거
         clean_text = text.encode('utf-8', 'ignore').decode('utf-8')
     except Exception:
-        # 혹시 모를 예외 발생 시 원본 텍스트 사용
         clean_text = text
 
     if not clean_text:
         return []
-    # 🌟🌟🌟 전처리 종료 🌟🌟🌟
-    
 
     tokens: List[str] = []
     
-    # 🌟 clean_text 사용
-    for token in KIWI_PROCESSOR.tokenize(clean_text, normalize_coda=True):
-        if token.tag.startswith(('N', 'V', 'M', 'SL', 'SN')):
-            tokens.append(token.form)
+    try:
+        for token in KIWI_PROCESSOR.tokenize(clean_text, normalize_coda=True):
+            if token.tag.startswith(('N', 'V', 'M', 'SL', 'SN')):
+                tokens.append(token.form)
+    except Exception as e:
+        # 토큰화 중 에러 발생 시, 멈추지 않고 해당 문장은 건너뛰거나 어절 단위로 대체
+        print(f"[Tokenize Warning] Skipped text due to error: {e}")
+        return clean_text.split()
             
     return tokens
 
 class BM25Retriever:
     def __init__(self, docs: List[Document]):
         self.docs = docs
+        # 토큰화 과정에서 진행 상황을 알기 어려우니 간단한 메시지 출력
+        print(f"[BM25] {len(docs)}개 문서 토큰화 시작...")
         self.corpus_tokens: List[List[str]] = [simple_tokenize(d.text) for d in docs]
         self.bm25 = BM25Okapi(self.corpus_tokens)
+        print(f"[BM25] 토큰화 및 인덱싱 완료.")
 
     def search(self, query: str, top_k: int = 30) -> List[Document]:
         tokens = simple_tokenize(query)
@@ -309,10 +286,6 @@ class BM25Retriever:
 # =========================
 
 class VectorReranker:
-    """
-    SentenceTransformer로 후보 문서들을 벡터화하고
-    cosine similarity로 재정렬.
-    """
     def __init__(
         self,
         model_name: str = "jhgan/ko-sroberta-multitask",
@@ -441,12 +414,45 @@ class RAGPipeline:
         return answer
 
 
+# 🌟🌟🌟 GPT API 호출 함수 (수정본: 보안 적용) 🌟🌟🌟
+
+def call_openai_api(system_msg: str, user_msg: str) -> str:
+    """
+    OpenAI API를 호출하여 최종 답변을 생성합니다.
+    .env 파일에서 키를 로드하므로 보안상 안전합니다.
+    """
+    # .env에서 가져오기
+    api_key = os.getenv("OPENAI_API_KEY")
+    
+    if not api_key:
+        return "[오류] .env 파일에서 OPENAI_API_KEY를 찾을 수 없습니다. .env 파일을 확인해주세요."
+
+    try:
+        # GPT 클라이언트 초기화
+        client = OpenAI(api_key=api_key)
+        
+        # API 호출
+        response = client.chat.completions.create(
+            model="gpt-4o", 
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.0 
+        )
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        return f"[LLM 호출 오류] API 호출 중 오류 발생: {e}"
+
+
 # =========================
 # 6. 간단 테스트용 main
 # =========================
 
 if __name__ == "__main__":
     print(f"[RAG] Using DB_PATH = {DB_PATH}")
+    
     rag = RAGPipeline()
 
     while True:
@@ -458,12 +464,11 @@ if __name__ == "__main__":
         if not q:
             break
 
-        docs = rag.retrieve(q)
-        print(f"\n[검색된 문서 수: {len(docs)}]\n")
-        for i, d in enumerate(docs, start=1):
-            print("=" * 80)
-            print(f"[문서 {i}] id={d.id}, type={d.type}")
-            print(d.text[:500])
-            if len(d.text) > 500:
-                print("... (생략)")
-        print("\n--- 여기까지가 RAG 컨텍스트입니다. ---\n")
+        print("\n--- 🧠 LLM이 답변을 생성 중입니다... ---")
+        
+        # RAG 검색과 GPT 호출을 한 번에 실행
+        answer = rag.answer_with_llm(q, llm_call=call_openai_api)
+        
+        print("\n=======================================================")
+        print(f"[궁금했슈(SSU) 답변]\n{answer}")
+        print("=======================================================\n")
