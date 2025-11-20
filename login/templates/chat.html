@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>궁금했슈 - 채팅</title>
+    <style>
+        /* 디자인 통일성을 위한 CSS */
+        body {
+            background-color: #f0f2f5;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        
+        .container {
+            background: white;
+            padding: 0;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px; /* 모바일 대응 */
+            height: 80vh; /* 화면 꽉 차지 않게 */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #007bff;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .chat-box {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+
+        .bot {
+            background-color: #f1f0f0;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+            color: #333;
+        }
+
+        .user {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+
+        .input-area {
+            padding: 15px;
+            background: #f9f9f9;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+
+        input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 24px;
+            outline: none;
+            font-size: 0.95rem;
+        }
+
+        input:focus {
+            border-color: #007bff;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        #loading {
+            font-size: 0.8rem;
+            color: #888;
+            margin-left: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">🦄 궁금했슈 (SSU Chatbot)</div>
+        
+        <div class="chat-box" id="chat-box">
+            <div class="message bot">안녕하세요! 숭실대학교 챗봇입니다. <br>무엇을 도와드릴까요?</div>
+        </div>
+        <div id="loading">답변 생성 중...</div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="질문을 입력하세요..." onkeypress="if(event.keyCode==13) sendMsg()">
+            <button onclick="sendMsg()" id="send-btn">전송</button>
+        </div>
+    </div>
+
+    <script>
+        async function sendMsg() {
+            const input = document.getElementById("user-input");
+            const chatBox = document.getElementById("chat-box");
+            const btn = document.getElementById("send-btn");
+            const loading = document.getElementById("loading");
+            
+            const question = input.value.trim();
+            if (!question) return;
+
+            // 1. 사용자 메시지 추가
+            addMessage(question, "user");
+            input.value = "";
+
+            // 2. 로딩 표시
+            loading.style.display = "block";
+            btn.disabled = true;
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const response = await fetch("/api/ask", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question: question })
+                });
+                
+                const data = await response.json();
+                
+                // 3. 봇 메시지 추가
+                loading.style.display = "none";
+                addMessage(data.answer.replace(/\n/g, "<br>"), "bot");
+
+            } catch (error) {
+                loading.style.display = "none";
+                addMessage("오류가 발생했습니다. 잠시 후 다시 시도해주세요.", "bot");
+            }
+
+            btn.disabled = false;
+            input.focus();
+        }
+
+        function addMessage(text, type) {
+            const chatBox = document.getElementById("chat-box");
+            const div = document.createElement("div");
+            div.classList.add("message", type);
+            div.innerHTML = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
