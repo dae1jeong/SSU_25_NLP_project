@@ -433,7 +433,7 @@ def call_openai_api(system_msg: str, user_msg: str) -> str:
         
         # API 호출
         response = client.chat.completions.create(
-            model="gpt-4o", 
+            model="gpt-4o-mini", 
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": user_msg},
