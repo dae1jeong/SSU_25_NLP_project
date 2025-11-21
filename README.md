@@ -9,8 +9,8 @@ commit test
 
 
 추가 사항
-+) generate_dataset_chunking 추가 -> chunking 추가함.
 
++) generate_dataset_chunking 추가 -> chunking 추가함.
 <details>
 <summary>자세한 내용 보기</summary>
 
@@ -67,6 +67,6 @@ ragas는 llm을 도구로 활용하여 rag를 자동화된 정량적 평가 지�
 
 
 앞으로
-+) vector 실행해서 chunked_data.jsonl과 chorma db 획득
-+) chroma db 사용해서 vector Search 하도록 rag_pipline 수정
-+) 3_evaluate_ragas.py 디버깅
++) vector 실행해서 chunked_data.jsonl과 chorma db 획득\n
++) chroma db 사용해서 vector Search 하도록 rag_pipline 수정\n
++) 3_evaluate_ragas.py 디버깅\n
