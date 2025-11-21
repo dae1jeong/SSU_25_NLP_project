@@ -76,10 +76,10 @@ def main():
     print(f"   - 평균 점수: {avg_score:.2f} / 5.0 점")
     
     # 결과 저장
-    with open("Evaluation/final_evaluation_report.json", "w", encoding="utf-8") as f:
+    with open("Evaluation/data/final_evaluation_report.json", "w", encoding="utf-8") as f:
         json.dump(evaluated_results, f, ensure_ascii=False, indent=2)
         
-    print("✅ 채점 완료! 상세 결과: Evaluation/final_evaluation_report.json")
+    print("✅ 채점 완료! 상세 결과: Evaluation/data/final_evaluation_report.json")
 
 if __name__ == "__main__":
     main()

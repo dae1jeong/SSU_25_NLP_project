@@ -411,6 +411,18 @@ class RAGPipeline:
         docs = self.retrieve(query, intent=intent, slots=slots)
         system_msg, user_msg = self.build_prompt(query, docs)
         answer = llm_call(system_msg, user_msg)
+
+
+        # 🌟🌟🌟 성능평가를 위한 답변 생성 시 RAGAS 입력 구조로 변환
+        # ragas_input = {
+        #     "query": query,
+        #     "answer": answer,
+        #     "context": [
+        #         {"id": d.id, "text": d.text, "meta": d.meta} for d in docs
+        #     ]
+        # }
+        # return ragas_input
+        
         return answer
 
 

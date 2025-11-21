@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from RAG.rag_pipeline import RAGPipeline, call_openai_api
 
 def run_test():
-    data_path = "Evaluation/qa_dataset_5k.jsonl"
+    data_path = "Evaluation/data/ragas_qa_dataset.jsonl"
     if not os.path.exists(data_path):
         print("❌ 데이터셋 파일이 없습니다. 1번 코드를 먼저 실행하세요.")
         return
@@ -36,21 +36,21 @@ def run_test():
         
         # 챗봇에게 질문 던지기
         try:
-            predicted_answer = rag.answer_with_llm(question, llm_call=call_openai_api)
+            model_answer = rag.answer_with_llm(question, llm_call=call_openai_api)
         except Exception as e:
-            predicted_answer = f"에러 발생: {e}"
+            model_answer = f"에러 발생: {e}"
         
         results.append({
             "question": question,
             "ground_truth": ground_truth,
-            "predicted_answer": predicted_answer
+            "model_answer": model_answer
         })
 
     # 5. 결과 저장
-    with open("Evaluation/rag_test_results.json", "w", encoding="utf-8") as f:
+    with open("Evaluation/data/rag_test_results2.json", "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
         
-    print("✅ 실행 완료! 결과 파일: Evaluation/rag_test_results.json")
+    print("✅ 실행 완료! 결과 파일: Evaluation/data/rag_test_results.json")
 
 if __name__ == "__main__":
     run_test()

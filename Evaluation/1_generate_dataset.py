@@ -3,9 +3,10 @@ import sys
 import json
 import sqlite3
 import random
-from openai import OpenAI
+from openai import OpenAIcd
 from dotenv import load_dotenv
 from tqdm import tqdm
+
 
 # 1. 프로젝트 루트 경로 설정 (부모 폴더의 모듈을 가져오기 위함)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # 2. .env 로드
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAIcd(api_key=os.getenv("OPENAI_API_KEY"))
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ssu_chatbot_data.db")
 
 def fetch_documents(limit=10):
