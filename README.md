@@ -10,7 +10,7 @@ commit test
 
 추가 사항
 
-+) generate_dataset_chunking 추가 -> chunking 추가함.
+- generate_dataset_chunking 추가 -> chunking 추가함.
 <details>
 <summary>자세한 내용 보기</summary>
 
@@ -35,7 +35,7 @@ commit test
 
 </details>
 
-+) 중간결과물 얻기 위해 chroma_db.py 수정
+- 중간결과물 얻기 위해 chroma_db.py 수정
 <details>
   <summary>자세한 내용 보기</summary>
   현재 합성데이터셋 만들 때 vector_db에서 청킹을 하는 방식, 사용한 db가 같음.
@@ -48,7 +48,7 @@ chroma db를 다시 만들자.
 
 </details>
 
-+) rag_pipeline 수정함. ragas 이용할 수 있도록
+- rag_pipeline 수정함. ragas 이용할 수 있도록
 <details>
   <summary>자세히보기</summary>
   평가 시 현재 코드 처럼 llm 평가도 유지하고, + ragas (정량적 평가 지표)도 추가하자.
@@ -63,10 +63,10 @@ ragas는 llm을 도구로 활용하여 rag를 자동화된 정량적 평가 지�
 | **Context Relevancy (컨텍스트 관련성)** | **검색 (Retrieval)**  | 검색된 컨텍스트가 **질문**에 얼마나 집중하고 불필요한 정보가 없는가?                     |
 
 </details>
-+) ragas로 평가하는 코드 3_evaluate_ragas.py 추가...
+- ragas로 평가하는 코드 3_evaluate_ragas.py 추가...
 
 
 앞으로
-+) vector 실행해서 chunked_data.jsonl과 chorma db 획득\n
-+) chroma db 사용해서 vector Search 하도록 rag_pipline 수정\n
-+) 3_evaluate_ragas.py 디버깅\n
+- vector 실행해서 chunked_data.jsonl과 chorma db 획득
+- chroma db 사용해서 vector Search 하도록 rag_pipline 수정\n
+- 3_evaluate_ragas.py 디버깅\n
