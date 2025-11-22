@@ -20,7 +20,7 @@
 #    - 파일: notice crawling/image_captioned/ssu_rag_data_2025_v3.jsonl
 #    - 내용: 공지 제목, 카테고리, 학과, 날짜, 본문(이미지 OCR 포함 Markdown)
 # 3. 동아리 (Clubs):
-#    - 파일: everytime_crawling/everytime_crawling_club.jsonl
+#    - 파일: everytime_crawling/everytime_club_parsed.jsonl
 #    - 내용: 동아리명(title), 소개글(all_text), 원본 링크
 #
 # [실행 결과]
@@ -294,7 +294,7 @@ def main():
 
     # 3. 동아리 처리
     print("\n4. 동아리 데이터 처리 시작...")
-    club_file = os.path.join(BASE_DIR, "everytime_crawling", "everytime_crawling_club.jsonl") 
+    club_file = os.path.join(BASE_DIR, "everytime_crawling", "everytime_club_parsed.jsonl") 
     raw_clubs = load_data_from_jsonl(club_file)
     clubs_list = process_clubs(raw_clubs) if raw_clubs else []
     
