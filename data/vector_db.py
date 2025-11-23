@@ -28,6 +28,20 @@
 # 2. 동아리 설명글이 길기 때문에 '청킹(Chunking)'을 적용합니다.
 # ==============================================================================
 
+# ==============================================================================
+# [변경 사항]
+# 청킹 중간 결과 저장: DB에서 로드하고 청킹(Chunking)을 완료한 모든 텍스트 청크와 
+# 메타데이터를 chunked_data.jsonl 파일로 저장하는 로직이 
+# load_source_data 함수 마지막에 추가되었습니다.
+
+# 데이터셋 생성 효율화: 이 JSONL 파일을 사용해 generate_dataset.py에서 
+# 불필요한 중복 청킹 과정을 생략하고 바로 데이터를 로드할 수 있게 됩니다.
+
+# [추가된 상수]
+# CHUNKED_DATA_PATH = "chunked_data.jsonl": 청킹된 결과물을 저장할 파일 경로.
+# ==============================================================================
+
+
 import sqlite3
 import chromadb
 from sentence_transformers import SentenceTransformer
@@ -36,6 +50,8 @@ import time
 import torch
 import math
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+import json # ⭐ json 임포트 추가 ⭐
+import os # ⭐ os 임포트 추가 ⭐
 
 # --- 1. 설정 ---
 SOURCE_DB_PATH = "ssu_chatbot_data.db"
@@ -46,6 +62,8 @@ EMBEDDING_MODEL_NAME = "jhgan/ko-sbert-nli"
 CHUNK_SIZE = 400     # 청크 글자 수
 CHUNK_OVERLAP = 50   # 청크 겹침 글자 수
 CHROMA_ADD_BATCH_SIZE = 5000 
+# ⭐ 신규 상수: 청킹 결과물을 저장할 JSONL 파일 경로 ⭐
+CHUNKED_DATA_PATH = "chunked_data.jsonl" 
 
 # --- 2. 데이터 로드 함수 ---
 def load_source_data(db_path):
@@ -56,6 +74,9 @@ def load_source_data(db_path):
     documents = []
     metadatas = []
     ids = []
+    
+    # ⭐ 청킹된 데이터를 저장할 리스트 ⭐
+    chunk_exports = [] 
 
     # 청킹 도구
     text_splitter = RecursiveCharacterTextSplitter(
@@ -76,6 +97,9 @@ def load_source_data(db_path):
             "original_text": row[3]
         })
         ids.append(f"review_{row[0]}") 
+        
+        # ⭐ 청킹되지 않은 데이터도 동일한 형식으로 저장 ⭐
+        chunk_exports.append({"text": text, "metadata": metadatas[-1]})
 
     # ---------------------------------------------------------
     # [2] 공지사항 로드 (청킹 O)
@@ -83,55 +107,68 @@ def load_source_data(db_path):
     print(" -> 2/3. 'notices' 로딩 및 청킹 중...")
     cursor.execute("SELECT id, title, category, full_body_text, link, department FROM notices")
     for row in cursor.fetchall():
-        chunks = text_splitter.split_text(row[3])
+        # 원본 데이터와 메타데이터
+        original_title, category, full_body, link, department = row[1], row[2], row[3], row[4], row[5]
+        
+        chunks = text_splitter.split_text(full_body)
         for i, chunk in enumerate(chunks):
-            text = f"공지: {row[1]} (카테고리: {row[2]})\n내용: {chunk}"
-            documents.append(text)
-            metadatas.append({
+            text = f"공지: {original_title} (카테고리: {category})\n내용: {chunk}"
+            metadata = {
                 "source": "notice",
-                "title": row[1], "category": row[2], "department": row[5], "link": row[4],
+                "title": original_title, "category": category, "department": department, "link": link,
                 "original_text": chunk
-            })
+            }
+            documents.append(text)
+            metadatas.append(metadata)
             ids.append(f"notice_{row[0]}_chunk_{i}")
             
+            # ⭐ 청킹된 데이터 저장 ⭐
+            chunk_exports.append({"text": text, "metadata": metadata})
+            
     # ---------------------------------------------------------
-    # [3] (신규) 동아리 로드 (청킹 O) 
+    # [3] 동아리 로드 (청킹 O) 
     # ---------------------------------------------------------
     print(" -> 3/3. 'clubs' 로딩 및 청킹 중...")
     try:
         cursor.execute("SELECT id, club_name, category, description, recruitment_info, source_url FROM clubs")
         clubs = cursor.fetchall()
         for row in clubs:
-            club_id = row[0]
-            club_name = row[1]
-            category = row[2]
-            description = row[3]
-            url = row[5]
+            club_id, club_name, category, description, url = row[0], row[1], row[2], row[3], row[5]
 
-            # 동아리 본문 청킹
             chunks = text_splitter.split_text(description)
             
             for i, chunk in enumerate(chunks):
-                # 검색 잘 되게 텍스트 재구성
                 text = f"동아리: {club_name} (분과: {category})\n소개: {chunk}"
-                
-                documents.append(text)
-                metadatas.append({
+                metadata = {
                     "source": "club",
                     "club_name": club_name, 
                     "category": category,
                     "link": url,
                     "original_text": chunk
-                })
+                }
+                documents.append(text)
+                metadatas.append(metadata)
                 ids.append(f"club_{club_id}_chunk_{i}")
+                
+                # ⭐ 청킹된 데이터 저장 ⭐
+                chunk_exports.append({"text": text, "metadata": metadata})
+
     except Exception as e:
-        print(f"   [경고] 동아리 로드 중 오류: {e}")
-        
+        print(f"   [경고] 동아리 로드 중 오류: {e}")
+            
     conn.close()
+    
+    # ⭐ 4. 청킹 중간 결과물 저장 로직 추가 ⭐
+    print(f"\n[저장] 청킹 결과물 {len(chunk_exports)}개를 '{CHUNKED_DATA_PATH}'에 저장 중...")
+    with open(CHUNKED_DATA_PATH, 'w', encoding='utf-8') as f:
+        for item in chunk_exports:
+            f.write(json.dumps(item, ensure_ascii=False) + '\n')
+    print("[OK] 청킹 결과물 저장 완료.")
+
     print(f"\n[OK] 총 {len(documents)}개 청크 로드 완료.")
     return documents, metadatas, ids
 
-# --- 3. 메인 실행 ---
+# --- 3. 메인 실행 (기존과 동일) ---
 def main():
     start_time = time.time()
     
@@ -140,6 +177,11 @@ def main():
     
     if not documents: return
 
+    print("\n2. 벡터 데이터베이스 (ChromaDB) 초기화 중...")
+    client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
+    # ... (나머지 ChromaDB 로직은 동일) ...
+    # (생략)
+    
     print("\n2. 벡터 데이터베이스 (ChromaDB) 초기화 중...")
     client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
     collection = client.get_or_create_collection(
@@ -181,10 +223,11 @@ def main():
             metadatas=new_metas[i:end_idx], 
             ids=new_ids[i:end_idx]
         )
-
+        
     print("\n[모든 작업 완료]")
     print(f" -> {len(new_ids)}건의 신규 청크 저장 완료.")
     print(f" -> 총 실행 시간: {time.time() - start_time:.2f}초")
+
 
 if __name__ == "__main__":
     main()

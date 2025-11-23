@@ -20,7 +20,7 @@
 #    - 파일: notice crawling/image_captioned/ssu_rag_data_2025_v3.jsonl
 #    - 내용: 공지 제목, 카테고리, 학과, 날짜, 본문(이미지 OCR 포함 Markdown)
 # 3. 동아리 (Clubs):
-#    - 파일: everytime_crawling/everytime_crawling_club.jsonl
+#    - 파일: everytime_crawling/everytime_club_parsed.jsonl
 #    - 내용: 동아리명(title), 소개글(all_text), 원본 링크
 #
 # [실행 결과]
@@ -33,9 +33,13 @@ import json
 import os
 import pandas as pd
 
+# 현재 파일 기준으로 프로젝트 루트 경로 구하기
+# .../SSU_25_NLP_project/data/data.py -> PROJECT_ROOT = .../SSU_25_NLP_project
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # --- 1단계: 데이터베이스 초기 설정 ---
-def init_database(db_name="ssu_chatbot_data.db"):
-    conn = sqlite3.connect(db_name)
+def init_database(db_path: str):
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 1. 강의평
@@ -81,7 +85,7 @@ def init_database(db_name="ssu_chatbot_data.db"):
     
     conn.commit()
     conn.close()
-    print(f" -> 데이터베이스 '{db_name}' 및 3개 테이블 준비 완료")
+    print(f" -> 데이터베이스 '{db_path}' 및 3개 테이블 준비 완료")
 
 # --- 2단계: 데이터 로딩 함수 ---
 def load_data_from_jsonl(file_path):
@@ -114,7 +118,7 @@ def process_reviews(raw_data):
             if not professor_name or pd.isna(professor_name):
                 professor_name = "정보 없음"
             else:
-                professor_name =str(professor_name).strip()
+                professor_name = str(professor_name).strip()
 
             if cleaned_text:
                 processed_list.append({
@@ -125,6 +129,7 @@ def process_reviews(raw_data):
                     'review_text': cleaned_text
                 })
         except Exception:
+            # 개별 레코드 에러는 무시
             pass
     return processed_list
 
@@ -196,8 +201,8 @@ def process_clubs(raw_data):
     return processed_list
 
 # --- 4단계: 데이터베이스에 저장하는 함수 ---
-def save_data_to_db(db_name, processed_reviews, processed_notices, processed_clubs):
-    conn = sqlite3.connect(db_name)
+def save_data_to_db(db_path, processed_reviews, processed_notices, processed_clubs):
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     try:
@@ -208,8 +213,15 @@ def save_data_to_db(db_name, processed_reviews, processed_notices, processed_clu
                 INSERT OR IGNORE INTO lecture_reviews 
                 (subject_name, professor_name, star_rating, semester, review_text) 
                 VALUES (?, ?, ?, ?, ?)
-            """, (review['subject_name'], review['professor_name'], review['star_rating'], review['semester'], review['review_text']))
-            if cursor.rowcount > 0: count_reviews += 1
+            """, (
+                review['subject_name'],
+                review['professor_name'],
+                review['star_rating'],
+                review['semester'],
+                review['review_text']
+            ))
+            if cursor.rowcount > 0:
+                count_reviews += 1
             
         # 2. 공지사항 저장
         count_notices = 0
@@ -218,8 +230,17 @@ def save_data_to_db(db_name, processed_reviews, processed_notices, processed_clu
                 INSERT OR IGNORE INTO notices 
                 (title, category, post_date, status, full_body_text, link, department) 
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (notice['title'], notice['category'], notice['post_date'], notice['status'], notice['full_body_text'], notice['link'], notice['department']))
-            if cursor.rowcount > 0: count_notices += 1
+            """, (
+                notice['title'],
+                notice['category'],
+                notice['post_date'],
+                notice['status'],
+                notice['full_body_text'],
+                notice['link'],
+                notice['department']
+            ))
+            if cursor.rowcount > 0:
+                count_notices += 1
 
         # 3. 동아리 저장
         count_clubs = 0
@@ -228,8 +249,15 @@ def save_data_to_db(db_name, processed_reviews, processed_notices, processed_clu
                 INSERT OR IGNORE INTO clubs 
                 (club_name, category, description, recruitment_info, source_url) 
                 VALUES (?, ?, ?, ?, ?)
-            """, (club['club_name'], club['category'], club['description'], club['recruitment_info'], club['source_url']))
-            if cursor.rowcount > 0: count_clubs += 1
+            """, (
+                club['club_name'],
+                club['category'],
+                club['description'],
+                club['recruitment_info'],
+                club['source_url']
+            ))
+            if cursor.rowcount > 0:
+                count_clubs += 1
         
         conn.commit()
         print(f" -> [저장 완료] 강의평: {count_reviews}건, 공지: {count_notices}건, 동아리: {count_clubs}건")
@@ -243,11 +271,14 @@ def save_data_to_db(db_name, processed_reviews, processed_notices, processed_clu
 
 # --- 5단계: 전체 파이프라인 실행 ---
 def main():
-    db_path = "ssu_chatbot_data.db"
+    # DB는 프로젝트 루트에 생성
+    db_path = os.path.join(PROJECT_ROOT, "ssu_chatbot_data.db")
     print("1. 데이터베이스 초기화 시작...")
     init_database(db_path)
 
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # JSONL 경로는 프로젝트 루트 기준
+    BASE_DIR = PROJECT_ROOT
+    print(f" -> PROJECT_ROOT: {PROJECT_ROOT}")
     
     # 1. 강의평 처리
     print("\n2. 강의평 데이터 처리 시작...")
@@ -255,7 +286,7 @@ def main():
     raw_reviews = load_data_from_jsonl(review_file)
     reviews_list = process_reviews(raw_reviews) if raw_reviews else []
     
-    # 2. 공지사항 처리
+    # 2. 공지사항 데이터 처리
     print("\n3. 공지사항 데이터 처리 시작...")
     notice_file = os.path.join(BASE_DIR, "notice crawling", "image_captioned", "ssu_rag_data_2025_v3.jsonl")
     raw_notices = load_data_from_jsonl(notice_file)
@@ -263,7 +294,7 @@ def main():
 
     # 3. 동아리 처리
     print("\n4. 동아리 데이터 처리 시작...")
-    club_file = os.path.join(BASE_DIR, "everytime_crawling", "everytime_crawling_club.jsonl") 
+    club_file = os.path.join(BASE_DIR, "everytime_crawling", "everytime_club_parsed.jsonl") 
     raw_clubs = load_data_from_jsonl(club_file)
     clubs_list = process_clubs(raw_clubs) if raw_clubs else []
     
