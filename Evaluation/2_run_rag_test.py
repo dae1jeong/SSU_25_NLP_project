@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 # RAG 파이프라인 가져오기
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from RAG.rag_pipeline import RAGPipeline, call_openai_api
+from RAG.rag_pipeline_chunked import RAGPipeline, call_openai_api
 
 def run_test():
     data_path = "Evaluation/data/ragas_qa_dataset.jsonl"

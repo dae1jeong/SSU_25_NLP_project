@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # 인증 라우터
 from login.auth.routes import router as auth_router
 # RAG 파이프라인 (클래스만 가져오고 실행은 아직 안 함!)
-from RAG.rag_pipeline import RAGPipeline, call_openai_api
+from RAG.rag_pipeline_chunked import RAGPipeline, call_openai_api
 
 load_dotenv()
 
