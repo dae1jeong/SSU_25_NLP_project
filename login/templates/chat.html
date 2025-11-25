@@ -27,10 +27,11 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative; /* 워터마크 z-index 기준점 */
         }
 
         .header {
-            background: #007bff;
+            background: #33CCFF; /* 👈 헤더 색상: 하늘색으로 적용됨 */
             color: white;
             padding: 20px;
             text-align: center;
@@ -46,6 +47,21 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
+            position: relative; /* 메시지의 z-index 기준점 */
+        }
+        
+        /* 👈 워터마크 경로 수정 완료 (../static/image.png) */
+        .chat-box::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: url('../static/image.png'); /* 👈 올바른 상대 경로 */
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: 80%; /* 컨테이너 크기의 80% */
+            opacity: 0.1; /* 투명도 설정 (0.05~0.15 사이로 조절 가능) */
+            pointer-events: none;
+            z-index: 0; /* 메시지보다 아래에 배치 */
         }
 
         .message {
@@ -55,6 +71,8 @@
             font-size: 0.95rem;
             line-height: 1.4;
             word-wrap: break-word;
+            position: relative; /* 워터마크 위에 오도록 z-index 설정 가능 */
+            z-index: 1;
         }
 
         .bot {
@@ -84,6 +102,7 @@
             padding: 12px;
             border: 1px solid #ddd;
             border-radius: 24px;
+            box-sizing: border-box;
             outline: none;
             font-size: 0.95rem;
         }
