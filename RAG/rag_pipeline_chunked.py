@@ -21,6 +21,10 @@ from dotenv import load_dotenv
 import requests
 from bs4 import BeautifulSoup
 
+# 🔹 추가: Chroma + SBERT
+import chromadb
+from sentence_transformers import SentenceTransformer
+
 # ------------------------------------------------------------
 # 환경 변수 (토크나이저 경고 줄이기용, 선택)
 # ------------------------------------------------------------
@@ -31,7 +35,10 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 # 프로젝트 루트 / DB / HF 캐시 / .env 설정
 # ------------------------------------------------------------------
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(ROOT_DIR, "bm25_tokens.db")
+DB_PATH = os.path.join(ROOT_DIR, "bm25_tokens.db")          # BM25 토큰 DB
+CHROMA_PATH = os.path.join(ROOT_DIR, "chroma_db")           # Chroma 벡터 DB
+CHROMA_COLLECTION_NAME = "ssu_knowledge_base"
+EMBEDDING_MODEL_NAME = "jhgan/ko-sbert-nli"
 
 HF_CACHE_DIR = os.path.join(ROOT_DIR, "hf_cache")
 os.makedirs(HF_CACHE_DIR, exist_ok=True)
@@ -42,6 +49,7 @@ os.environ["SENTENCE_TRANSFORMERS_HOME"] = HF_CACHE_DIR
 
 print("[RAG] Using DB_PATH =", DB_PATH)
 print("[RAG] Using HF cache dir =", HF_CACHE_DIR)
+print("[RAG] Using CHROMA_PATH =", CHROMA_PATH)
 
 env_path = os.path.join(ROOT_DIR, ".env")
 print(f"[RAG] Loading .env from: {env_path}")
@@ -122,17 +130,6 @@ def fetch_soongguri_menu(date_str: str | None = None, rcd: str = "1") -> str:
     """
     soongguri AJAX 엔드포인트(/m/m_req/m_menu.php)에서
     주어진 날짜(date_str)와 식당 코드(rcd)의 메뉴 HTML을 직접 가져와서 파싱.
-
-    date_str:
-      - None → 오늘
-      - '2025-11-25' 또는 '20251125' 둘 다 허용
-    rcd:
-      - "1": 학생식당
-      - "2": 숭실도담식당
-      - "4": 스낵코너
-      - "5": 푸드코트
-      - "6": THE KITCHEN
-      - "7": Faculty Lounge
     """
     sdt, label = _normalize_sdt(date_str)
 
@@ -376,14 +373,17 @@ class BM25DBRetriever:
         return [self.docs[i] for i in ranked_indices]
 
 
+# (기존 VectorReranker는 BM25 상위 k만 자르는 용도라서, 하이브리드 검색 도입 후 사용하지 않음.
+# 필요하면 남겨두고, 실제 호출은 하지 않는다.)
 class VectorReranker:
     """
-    ⚠️ 세그폴트 방지를 위해 sentence_transformers 모델을 사용하지 않고
+    ⚠️ (현재 미사용)
+    세그폴트 방지를 위해 sentence_transformers 모델을 사용하지 않고
     BM25 결과를 그대로 상위 top_k만 잘라서 반환하는 단순한 reranker.
     """
 
     def __init__(self, model_name: str = "jhgan/ko-sroberta-multitask"):
-        print("[VectorReranker] sentence_transformers 비활성화됨 → BM25 순서 그대로 사용합니다.")
+        print("[VectorReranker] (미사용) BM25 순서 그대로 사용합니다.")
         self.model = None  # 실제 모델 로딩 안 함
 
     def rerank(self, query: str, candidates: List[ChunkDocument], top_k: int = 5) -> List[ChunkDocument]:
@@ -392,17 +392,119 @@ class VectorReranker:
 
 class RAGPipeline:
     def __init__(self, bm25_top_k: int = 30, rerank_top_k: int = 5):
+        # 1) BM25용 청크 로드
         self.chunk_docs = load_chunks_from_db()
         self.bm25 = BM25DBRetriever(self.chunk_docs)
-        self.reranker = VectorReranker()
         self.bm25_top_k = bm25_top_k
         self.rerank_top_k = rerank_top_k
 
-    def retrieve(self, query: str, intent: str = None, slots: Dict = None):
-        slots = slots or {}
-        candidates = self.bm25.search(query, top_k=self.bm25_top_k)
+        # id → ChunkDocument 매핑 (RRF에서 사용)
+        self.id_to_doc: Dict[str, ChunkDocument] = {d.id: d for d in self.chunk_docs}
 
-        # intent / slots 필터
+        # 2) ChromaDB 연결 (벡터 검색용)
+        try:
+            self.chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+            self.chroma_collection = self.chroma_client.get_or_create_collection(
+                name=CHROMA_COLLECTION_NAME
+            )
+            print("[Chroma] 컬렉션 로드 완료:", CHROMA_COLLECTION_NAME)
+        except Exception as e:
+            print(f"[Chroma] 로드 실패: {e}")
+            self.chroma_client = None
+            self.chroma_collection = None
+
+        # 3) 쿼리 임베딩용 SBERT 
+        try:
+            self.encoder = SentenceTransformer(EMBEDDING_MODEL_NAME)
+            print(f"[Embedding] SentenceTransformer 로드 완료: {EMBEDDING_MODEL_NAME}")
+        except Exception as e:
+            print(f"[Embedding] SentenceTransformer 로드 실패: {e}")
+            self.encoder = None
+
+    # -------------------------
+    # 1) 벡터 검색 (Chroma)
+    # -------------------------
+    def vector_search(self, query: str, top_k: int = 30) -> List[ChunkDocument]:
+        """
+        ChromaDB에 저장된 임베딩 기반 벡터 검색
+        """
+        if self.chroma_collection is None or self.encoder is None:
+            return []
+
+        try:
+            query_emb = self.encoder.encode([query])  # (1, embedding_dim)
+            res = self.chroma_collection.query(
+                query_embeddings=query_emb.tolist(),
+                n_results=top_k,
+                include=["metadatas"],   # 🔥 ids는 최신버전에서 제거됨
+            )
+        except Exception as e:
+            print(f"[Chroma] vector_search 실패: {e}")
+            return []
+
+        metas = res.get("metadatas", [[]])[0]
+
+        ids = []
+        for m in metas:
+            cid = m.get("new_id")  # vector_db.py에서 저장한 실제 chunk ID
+            if cid:
+                ids.append(cid)
+
+        docs: List[ChunkDocument] = []
+        for cid in ids:
+            doc = self.id_to_doc.get(cid)
+            if doc:
+                docs.append(doc)
+
+        return docs
+
+    # -------------------------
+    # 2) RRF 결합 함수
+    # -------------------------
+    def _rrf_merge(
+        self,
+        bm25_docs: List[ChunkDocument],
+        vec_docs: List[ChunkDocument],
+        top_k: int = 30,
+        k: int = 60,
+    ) -> List[ChunkDocument]:
+        """
+        Reciprocal Rank Fusion:
+        각 랭크에 대해 1 / (k + rank)를 더해 점수를 합산한 뒤,
+        최종 점수 순으로 정렬해서 상위 top_k를 반환한다.
+        """
+        scores: Dict[str, float] = {}
+
+        # BM25 순위
+        for rank, d in enumerate(bm25_docs):
+            scores[d.id] = scores.get(d.id, 0.0) + 1.0 / (k + rank + 1)
+
+        # 벡터 검색 순위
+        for rank, d in enumerate(vec_docs):
+            scores[d.id] = scores.get(d.id, 0.0) + 1.0 / (k + rank + 1)
+
+        # 점수 기준으로 정렬
+        sorted_ids = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+        merged_docs: List[ChunkDocument] = []
+        for cid, _score in sorted_ids:
+            doc = self.id_to_doc.get(cid)
+            if doc and doc not in merged_docs:
+                merged_docs.append(doc)
+            if len(merged_docs) >= top_k:
+                break
+
+        return merged_docs
+
+    # -------------------------
+    # 3) intent/slot 필터
+    # -------------------------
+    def _apply_filters(
+        self,
+        candidates: List[ChunkDocument],
+        intent: Optional[str],
+        slots: Dict,
+    ) -> List[ChunkDocument]:
         if intent:
             candidates = [
                 d for d in candidates
@@ -432,11 +534,43 @@ class RAGPipeline:
                 if "club_name" in d.meta and club_name in d.meta["club_name"]
             ]
 
+        return candidates
+
+    # -------------------------
+    # 4) 최종 Retrieve (BM25 + 벡터 + RRF)
+    # -------------------------
+    def retrieve(self, query: str, intent: str = None, slots: Dict = None):
+        slots = slots or {}
+
+        # 1) BM25 후보 검색
+        bm25_candidates = self.bm25.search(query, top_k=self.bm25_top_k)
+
+        # 2) 벡터 검색 후보
+        vector_candidates = self.vector_search(query, top_k=self.bm25_top_k)
+
+        # 3) RRF로 두 결과 결합 (벡터 검색이 실패하면 BM25만 사용)
+        if vector_candidates:
+            merged = self._rrf_merge(
+                bm25_candidates,
+                vector_candidates,
+                top_k=self.bm25_top_k,
+            )
+        else:
+            merged = bm25_candidates
+
+        # 4) intent / slot 필터
+        candidates = self._apply_filters(merged, intent=intent, slots=slots)
+
+        # 5) 필터 결과가 비면 BM25 원본으로 fallback
         if not candidates:
-            candidates = self.bm25.search(query, top_k=self.bm25_top_k)
+            candidates = bm25_candidates
 
-        return self.reranker.rerank(query, candidates, top_k=self.rerank_top_k)
+        # 6) 최종 top_k 반환
+        return candidates[:self.rerank_top_k]
 
+    # -------------------------
+    # 5) 프롬프트 구성
+    # -------------------------
     def build_prompt(self, query: str, docs: List[ChunkDocument]) -> tuple[str, str]:
         context_blocks = []
         for i, d in enumerate(docs, start=1):
@@ -456,6 +590,9 @@ class RAGPipeline:
         )
         return system_msg, user_msg
 
+    # -------------------------
+    # 6) LLM 호출 래퍼
+    # -------------------------
     def answer_with_llm(
         self,
         query: str,
@@ -468,7 +605,6 @@ class RAGPipeline:
         """
 
         # ✅ 1) 질문 문자열만 보고 '학식' 관련 의도 자동 판별
-        q_lower = query.lower()
         if (
             ("학식" in query)
             or ("메뉴" in query)
@@ -530,13 +666,7 @@ def call_openai_api(system_msg: str, user_msg: str) -> str:
         return f"[LLM 호출 오류] API 호출 중 오류 발생: {e}"
 
 
-# =========================
-# 7. 전역 RAG 인스턴스 (웹 서버에서 바로 사용)
-# =========================
 
-print("[RAG] RAGPipeline 초기화 중...")
-rag = RAGPipeline()
-print("[RAG] RAGPipeline 초기화 완료!")
 
 
 # =========================
@@ -559,7 +689,6 @@ if __name__ == "__main__":
         print("\n--- 🧠 LLM이 답변을 생성 중입니다... ---")
 
         # 여기서 intent는 굳이 안 줘도 되지만, 넣어도 상관 없음
-        lower_q = q.lower()
         if ("학식" in q) or ("메뉴" in q) or ("밥 뭐" in q):
             intent = "학식_검색"
         else:

@@ -34,7 +34,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 import chromadb
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHUNKED_DATA_PATH = os.path.join(PROJECT_ROOT, "chunked_data.jsonl")
 VECTOR_DB_PATH = os.path.join(PROJECT_ROOT, "chroma_db")
 COLLECTION_NAME = "ssu_knowledge_base"
