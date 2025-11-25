@@ -1,23 +1,31 @@
-
-
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Callable
 import sqlite3
 import os
-import unicodedata
 from datetime import datetime
 import json
+import re  # 정규식
+
+import collections
+import collections.abc
+# bs4가 Python 3.12에서 collections.Callable을 참조해서 나는 오류 방지용 패치
+if not hasattr(collections, "Callable"):
+    collections.Callable = collections.abc.Callable  # type: ignore[attr-defined]
 
 import numpy as np
 from rank_bm25 import BM25Okapi
-from sentence_transformers import SentenceTransformer
-from kiwipiepy import Kiwi
 from openai import OpenAI
 from dotenv import load_dotenv
 
 import requests
 from bs4 import BeautifulSoup
+
+# ------------------------------------------------------------
+# 환경 변수 (토크나이저 경고 줄이기용, 선택)
+# ------------------------------------------------------------
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
 
 # ------------------------------------------------------------------
 # 프로젝트 루트 / DB / HF 캐시 / .env 설정
@@ -54,62 +62,156 @@ DORM_FOOD_URL = (
     "SShostel/mall_main.php?viewform=B0001_foodboard_list&board_no=1"
 )
 
+# soongguri가 모바일 브라우저라고 믿도록 헤더 세팅
+SOONGGURI_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+}
 
-def fetch_soongguri_menu() -> str:
+
+def _clean_line(text: str) -> str:
+    """공백 정리 + 쓸모없는 기호 제거용 유틸."""
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _normalize_sdt(date_str: str | None) -> tuple[str, str]:
     """
-    숭실대 생협(soongguri.com/m)의 현재 선택된 날짜 학식 메뉴를 파싱한다.
-    - HTML 구조: <td class="menu_nm">중식1</td> + <td class="menu_list">안에 상세 구성
+    date_str:
+      - None        → 오늘 날짜
+      - '20251125'  → 그대로 사용
+      - '2025-11-25' → '-' 제거 후 사용
+    return: (sdt, pretty_label)
     """
+    if not date_str:
+        dt = datetime.now()
+        sdt = dt.strftime("%Y%m%d")
+        label = dt.strftime("%Y-%m-%d")
+        return sdt, label
+
+    ds = date_str.strip()
+
+    # 2025-11-25 형식
+    if len(ds) == 10 and ds[4] == "-" and ds[7] == "-":
+        try:
+            dt = datetime.strptime(ds, "%Y-%m-%d")
+            return dt.strftime("%Y%m%d"), dt.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # 20251125 형식
+    if len(ds) == 8 and ds.isdigit():
+        try:
+            dt = datetime.strptime(ds, "%Y%m%d")
+            return ds, dt.strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # 이상하면 오늘 날짜로 fallback
+    dt = datetime.now()
+    return dt.strftime("%Y%m%d"), dt.strftime("%Y-%m-%d")
+
+
+def fetch_soongguri_menu(date_str: str | None = None, rcd: str = "1") -> str:
+    """
+    soongguri AJAX 엔드포인트(/m/m_req/m_menu.php)에서
+    주어진 날짜(date_str)와 식당 코드(rcd)의 메뉴 HTML을 직접 가져와서 파싱.
+
+    date_str:
+      - None → 오늘
+      - '2025-11-25' 또는 '20251125' 둘 다 허용
+    rcd:
+      - "1": 학생식당
+      - "2": 숭실도담식당
+      - "4": 스낵코너
+      - "5": 푸드코트
+      - "6": THE KITCHEN
+      - "7": Faculty Lounge
+    """
+    sdt, label = _normalize_sdt(date_str)
+
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     try:
-        resp = requests.get(SOONGGURI_URL, timeout=10)
-        resp.raise_for_status()
+        session = requests.Session()
+        session.headers.update(SOONGGURI_HEADERS)
+
+        # 실제 AJAX 메뉴 데이터 요청 (m_menu.php)
+        params = {"rcd": rcd, "sdt": sdt}
+        resp = session.get(
+            SOONGGURI_URL + "m_req/m_menu.php",
+            params=params,
+            timeout=10,
+            verify=False,
+        )
     except Exception as e:
-        return f"[학식] soongguri 사이트 접속 실패: {e}"
+        return (
+            "[생협 식당 메뉴]\n"
+            "soongguri 사이트에 접속하지 못했어요.\n"
+            f"(에러: {e})\n"
+            "→ 직접 확인: https://soongguri.com/m/"
+        )
+
+    if resp.status_code != 200 or len(resp.text.strip()) < 50:
+        return (
+            f"[생협 식당 메뉴 - {label}]\n"
+            "현재 soongguri에서 학식 정보를 가져오지 못했어요.\n"
+            "→ 직접 확인: https://soongguri.com/m/"
+        )
 
     soup = BeautifulSoup(resp.text, "html.parser")
+    table = soup.find("table")
 
-    main_div = soup.find("div", id="mainDiv")
-    if not main_div:
-        return "[학식] soongguri 페이지에서 mainDiv를 찾지 못했습니다. HTML 구조를 다시 확인해주세요."
+    if not table:
+        return (
+            f"[생협 식당 메뉴 - {label}]\n"
+            "식단 테이블을 찾지 못했어요.\n"
+            "→ 직접 확인: https://soongguri.com/m/"
+        )
 
-    menus: List[str] = []
+    menus: list[str] = []
 
-    # 각 메뉴(중식1, 중식2, 석식1 등)는 한 줄(tr)에 menu_nm / menu_list 형식으로 들어있음
-    for tr in main_div.find_all("tr"):
+    for tr in table.find_all("tr"):
         name_td = tr.find("td", class_="menu_nm")
         list_td = tr.find("td", class_="menu_list")
         if not (name_td and list_td):
             continue
 
-        meal_name = name_td.get_text(strip=True)  # 예: "중식1", "석식1"
+        meal_name = name_td.get_text(strip=True)  # 예: 중식1, 석식1...
 
-        # 1) 코너 이름 (예: [뚝배기코너], [덮밥코너] 등)
+        # 코너명 [뚝배기코너] 등
         corner = ""
-        first_block = list_td.find("div")
-        if first_block:
-            for tag in first_block.find_all(["font", "b", "span"], recursive=True):
-                text = tag.get_text(strip=True)
-                if "[" in text and "]" in text:
-                    corner = text
-                    break
-
-        # 2) 메인 메뉴 이름 (예: ★ 차돌순두부찌개 - 5.0)
-        main_dish = ""
-        for tag in list_td.find_all(["font", "b", "span"], recursive=True):
-            text = tag.get_text(" ", strip=True)
-            if "★" in text:
-                main_dish = text.replace("★", "").strip()
+        for tag in list_td.find_all(["font", "b", "span"]):
+            txt = tag.get_text(strip=True)
+            m = re.search(r"\[[^\]]+\]", txt)
+            if m:
+                corner = m.group(0)
                 break
 
-        # 3) 반찬 / 구성 메뉴들 (작은 table의 td들)
-        side_dishes: List[str] = []
-        for td in list_td.find_all("td"):
-            t = td.get_text(strip=True)
+        # 메인 메뉴 (★ 표시)
+        main_dish = ""
+        for tag in list_td.find_all(["font", "b", "span"]):
+            txt = tag.get_text(" ", strip=True)
+            if "★" in txt:
+                main_dish = txt.replace("★", "").strip()
+                break
+
+        # 반찬 후보들
+        side_dishes: list[str] = []
+        for li in list_td.select("ul.mean_list li, ul.mean_list td, ul.mean_list .xl65"):
+            t = _clean_line(li.get_text(strip=True))
             if not t:
                 continue
             if "알러지유발식품" in t or "원산지" in t:
                 continue
-            if t == "　":
+            if all(ord(ch) < 128 for ch in t):  # 전부 ASCII(영문)면 스킵
                 continue
             if t not in side_dishes:
                 side_dishes.append(t)
@@ -125,29 +227,24 @@ def fetch_soongguri_menu() -> str:
         menus.append(line)
 
     if not menus:
-        return "[학식] soongguri에서 오늘의 메뉴를 파싱하지 못했습니다."
+        return (
+            f"[생협 식당 메뉴 - {label}]\n"
+            "메뉴 파싱 실패 (항목 없음)\n"
+            "→ https://soongguri.com/m/ 에서 직접 확인해 주세요."
+        )
 
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    menu_text = f"[생협 식당 메뉴 - {today_str}]\n" + "\n\n".join(menus)
-    return menu_text
+    return f"[생협 식당 메뉴 - {label}]\n" + "\n\n".join(menus)
 
 
 def fetch_dorm_menu() -> str:
     """
     숭실대 기숙사 식당 주간 식단표(boxstyle02 테이블)에서 '오늘 날짜'에 해당하는
-    중식/석식 메뉴를 파싱한다.
-    - HTML 구조:
-        <table class="boxstyle02">
-          <tr> (헤더)
-          <tr>
-            <th> <a ...>2025-11-21 (금)</a> </th>
-            <td>조식</td>
-            <td>중식</td>
-            <td>석식</td>
-            <td>중.석식</td>
+    조식/중식/석식 메뉴를 파싱한다.
     """
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     try:
-        # 인증서 경고 회피용 verify=False (필요하면 True로 변경 가능)
         resp = requests.get(DORM_FOOD_URL, timeout=10, verify=False)
         resp.raise_for_status()
     except Exception as e:
@@ -174,7 +271,7 @@ def fetch_dorm_menu() -> str:
 
     # 오늘 날짜가 없으면, 주간 메뉴 요약 반환
     if target_row is None:
-        rows_text = []
+        rows_text: list[str] = []
         for tr in table.find_all("tr")[1:]:
             th = tr.find("th")
             if not th:
@@ -237,9 +334,10 @@ def build_meal_context() -> str:
     return "\n".join(context_parts)
 
 
-# ==============================================4
+# ==============================================
+# 1. BM25 / RAG 파트
+# ==============================================
 
-# -----------------------------
 @dataclass
 class ChunkDocument:
     id: str
@@ -247,7 +345,7 @@ class ChunkDocument:
     meta: Dict
     tokens: List[str]
 
-# -----------------------------
+
 def load_chunks_from_db(db_path: str = DB_PATH) -> List[ChunkDocument]:
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
@@ -263,7 +361,7 @@ def load_chunks_from_db(db_path: str = DB_PATH) -> List[ChunkDocument]:
     print(f"[DB] 총 {len(docs)}개의 청크 로드 완료")
     return docs
 
-# -----------------------------
+
 class BM25DBRetriever:
     def __init__(self, chunk_docs: List[ChunkDocument]):
         self.docs = chunk_docs
@@ -277,28 +375,21 @@ class BM25DBRetriever:
         ranked_indices = np.argsort(-scores)[:top_k]
         return [self.docs[i] for i in ranked_indices]
 
-# -----------------------------
-class VectorReranker:
-    def __init__(self, model_name: str = "jhgan/ko-sroberta-multitask"):
-        self.model = SentenceTransformer(model_name)
 
-    @staticmethod
-    def _cosine_sim(query_emb: np.ndarray, doc_embs: np.ndarray) -> np.ndarray:
-        q = query_emb / (np.linalg.norm(query_emb) + 1e-12)
-        d = doc_embs / (np.linalg.norm(doc_embs, axis=1, keepdims=True) + 1e-12)
-        return d @ q
+class VectorReranker:
+    """
+    ⚠️ 세그폴트 방지를 위해 sentence_transformers 모델을 사용하지 않고
+    BM25 결과를 그대로 상위 top_k만 잘라서 반환하는 단순한 reranker.
+    """
+
+    def __init__(self, model_name: str = "jhgan/ko-sroberta-multitask"):
+        print("[VectorReranker] sentence_transformers 비활성화됨 → BM25 순서 그대로 사용합니다.")
+        self.model = None  # 실제 모델 로딩 안 함
 
     def rerank(self, query: str, candidates: List[ChunkDocument], top_k: int = 5) -> List[ChunkDocument]:
-        if not candidates:
-            return []
-        texts = [d.text for d in candidates]
-        doc_embs = self.model.encode(texts, convert_to_numpy=True)
-        query_emb = self.model.encode([query], convert_to_numpy=True)[0]
-        sims = self._cosine_sim(query_emb, doc_embs)
-        ranked_indices = np.argsort(-sims)[:top_k]
-        return [candidates[i] for i in ranked_indices]
+        return candidates[:top_k]
 
-# -----------------------------
+
 class RAGPipeline:
     def __init__(self, bm25_top_k: int = 30, rerank_top_k: int = 5):
         self.chunk_docs = load_chunks_from_db()
@@ -315,21 +406,31 @@ class RAGPipeline:
         if intent:
             candidates = [
                 d for d in candidates
-                if (intent == "강의평_검색" and d.meta.get("source") == "lecture_review") or
-                   (intent == "공지_검색" and d.meta.get("source") == "notice") or
-                   (intent == "동아리_검색" and d.meta.get("source") == "club")
+                if (intent == "강의평_검색" and d.meta.get("source") == "lecture_review")
+                or (intent == "공지_검색" and d.meta.get("source") == "notice")
+                or (intent == "동아리_검색" and d.meta.get("source") == "club")
             ]
+
         prof = slots.get("professor_name") or slots.get("professor")
         if prof:
-            candidates = [d for d in candidates if "professor" in d.meta and prof in d.meta["professor"]]
+            candidates = [
+                d for d in candidates
+                if "professor" in d.meta and prof in d.meta["professor"]
+            ]
 
         dept = slots.get("department")
         if dept:
-            candidates = [d for d in candidates if "department" in d.meta and dept in d.meta["department"]]
+            candidates = [
+                d for d in candidates
+                if "department" in d.meta and dept in d.meta["department"]
+            ]
 
         club_name = slots.get("club_name")
         if club_name:
-            candidates = [d for d in candidates if "club_name" in d.meta and club_name in d.meta["club_name"]]
+            candidates = [
+                d for d in candidates
+                if "club_name" in d.meta and club_name in d.meta["club_name"]
+            ]
 
         if not candidates:
             candidates = self.bm25.search(query, top_k=self.bm25_top_k)
@@ -348,11 +449,54 @@ class RAGPipeline:
             "아래에 제공된 컨텍스트 안에서만 근거를 찾아서 한국어로 친절하게 답변해.\n"
             "모르겠으면 모른다고 말해."
         )
-        user_msg = f"사용자 질문:\n{query}\n\n다음은 관련 문서들이야. 이 정보만 근거로 답변을 만들어줘.\n\n{context_text}"
+        user_msg = (
+            f"사용자 질문:\n{query}\n\n"
+            f"다음은 관련 문서들이야. 이 정보만 근거로 답변을 만들어줘.\n\n"
+            f"{context_text}"
+        )
         return system_msg, user_msg
 
-    def answer_with_llm(self, query: str, llm_call: Callable[[str, str], str], intent: str = None, slots: Dict = None) -> str:
-        docs = self.retrieve(query, intent=intent, slots=slots)
+    def answer_with_llm(
+        self,
+        query: str,
+        llm_call: Callable[[str, str], str],
+        intent: str = None,
+        slots: Dict = None,
+    ) -> str:
+        """
+        질문/의도에 따라 학식 스크래핑 또는 일반 RAG를 사용하여 답변 생성.
+        """
+
+        # ✅ 1) 질문 문자열만 보고 '학식' 관련 의도 자동 판별
+        q_lower = query.lower()
+        if (
+            ("학식" in query)
+            or ("메뉴" in query)
+            or ("밥 뭐" in query)
+            or ("밥 뭐 나와" in query)
+            or ("오늘 밥" in query)
+            or ("생협" in query)
+            or ("기숙사 식당" in query)
+        ):
+            intent = "학식_검색"
+
+        # ✅ 2) 학식 의도면 RAG 말고 실시간 스크래핑 컨텍스트 사용
+        if intent == "학식_검색":
+            meal_context = build_meal_context()
+            system_msg = (
+                "너는 숭실대학교 학식 정보를 알려주는 챗봇이야.\n"
+                "아래 컨텍스트(생협/기숙사 식당 메뉴)를 참고해서, "
+                "사용자 질문에 맞게 오늘의 학식 정보를 간략하고 보기 좋게 정리해서 알려줘.\n"
+                "메뉴 이름, 코너 이름, 가격, 끼니(조식/중식/석식) 등을 정돈해서 한국어로 친절하게 설명해."
+            )
+            user_msg = (
+                f"사용자 질문: {query}\n\n"
+                f"다음은 오늘의 학식 정보야:\n\n{meal_context}"
+            )
+            return llm_call(system_msg, user_msg)
+
+        # ✅ 3) 그 외는 기존 RAG 파이프라인 사용
+        docs = self.retrieve(query, intent=intent, slots=slots or {})
         system_msg, user_msg = self.build_prompt(query, docs)
         return llm_call(system_msg, user_msg)
 
@@ -387,13 +531,21 @@ def call_openai_api(system_msg: str, user_msg: str) -> str:
 
 
 # =========================
-# 7. 간단 테스트용 main
+# 7. 전역 RAG 인스턴스 (웹 서버에서 바로 사용)
+# =========================
+
+print("[RAG] RAGPipeline 초기화 중...")
+rag = RAGPipeline()
+print("[RAG] RAGPipeline 초기화 완료!")
+
+
+# =========================
+# 8. 간단 CLI 테스트용 main
 # =========================
 
 if __name__ == "__main__":
     print(f"[RAG] Using DB_PATH = {DB_PATH}")
-
-    rag = RAGPipeline()
+    print("터미널에서 직접 테스트합니다. '학식'이라고 쳐보세요.\n")
 
     while True:
         try:
@@ -406,9 +558,9 @@ if __name__ == "__main__":
 
         print("\n--- 🧠 LLM이 답변을 생성 중입니다... ---")
 
-        # 매우 간단한 intent 예시 (실제 서비스에서는 NLU에서 넘겨줄 것)
+        # 여기서 intent는 굳이 안 줘도 되지만, 넣어도 상관 없음
         lower_q = q.lower()
-        if "학식" in q or "메뉴" in q or "밥 뭐" in q:
+        if ("학식" in q) or ("메뉴" in q) or ("밥 뭐" in q):
             intent = "학식_검색"
         else:
             intent = None
