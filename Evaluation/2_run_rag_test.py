@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from RAG.rag_pipeline_chunked import RAGPipeline, call_openai_api
 
 def run_test():
-    data_path = "Evaluation/data/ragas_qa_dataset.jsonl"
+    data_path = "Evaluation/data/ragas_qa_dataset_수정본.jsonl"
     if not os.path.exists(data_path):
         print("❌ 데이터셋 파일이 없습니다. 1번 코드를 먼저 실행하세요.")
         return

@@ -188,7 +188,7 @@ def generate_qa_pair(text):
 # 메인 실행
 # ---------------------------
 if __name__ == "__main__":
-    NUM_QA = 1000    #질문 수 저장
+    NUM_QA = 10    #질문 수 저장
     lecture_reviews, notices_chunks, clubs_chunks = load_all_data() # load_all_data_from_chunks()
     sampled_docs = sample_documents(lecture_reviews, notices_chunks, clubs_chunks, NUM_QA=NUM_QA, ratios=(2,5,3))
 
@@ -199,7 +199,7 @@ if __name__ == "__main__":
             dataset.append(qa)
 
     os.makedirs("Evaluation/data", exist_ok=True)
-    output_file = "Evaluation/data/ragas_qa_dataset.jsonl"  #OUTPUT 경로
+    output_file = "Evaluation/data/ragas_qa_dataset2.jsonl"  #OUTPUT 경로
     with open(output_file, "w", encoding="utf-8") as f:
         for item in dataset:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
