@@ -34,7 +34,7 @@ def evaluate_answer(question, ground_truth, predicted):
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",  # ✅ 채점은 똑똑한 4o 사용!
+            model="gpt-4o",  # 채점은 똑똑한 4o 사용!
             messages=[{"role": "system", "content": "너는 채점관이야. JSON으로만 답해."},
                       {"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
@@ -44,7 +44,7 @@ def evaluate_answer(question, ground_truth, predicted):
         return {"score": 0, "reason": "채점 중 에러 발생"}
 
 def main():
-    input_path = "Evaluation/rag_test_results.json"
+    input_path = "Evaluation/data/rag_test_results2.json"
     if not os.path.exists(input_path):
         print("❌ 실행 결과 파일이 없습니다. 2번 코드를 먼저 실행하세요.")
         return
@@ -52,13 +52,13 @@ def main():
     with open(input_path, "r", encoding="utf-8") as f:
         results = json.load(f)
         
-    print(f"⚖️ GPT-4o 채점관이 {len(results)}개의 답안을 채점합니다...")
+    print(f"GPT-4o 채점관이 {len(results)}개의 답안을 채점합니다...")
     
     total_score = 0
     evaluated_results = []
     
     for item in tqdm(results):
-        eval_result = evaluate_answer(item['question'], item['ground_truth'], item['predicted_answer'])
+        eval_result = evaluate_answer(item['question'], item['ground_truth'], item['model_answer'])
         
         item['score'] = eval_result['score']
         item['reason'] = eval_result['reason']
@@ -79,7 +79,7 @@ def main():
     with open("Evaluation/data/final_evaluation_report.json", "w", encoding="utf-8") as f:
         json.dump(evaluated_results, f, ensure_ascii=False, indent=2)
         
-    print("✅ 채점 완료! 상세 결과: Evaluation/data/final_evaluation_report.json")
+    print("채점 완료! 상세 결과: Evaluation/data/final_evaluation_report.json")
 
 if __name__ == "__main__":
     main()

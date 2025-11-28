@@ -101,7 +101,7 @@ def load_all_data():
     return lecture_reviews, notices_chunks, clubs_chunks
 
 # ---------------------------
-# ⭐⭐⭐ 청킹된 데이터 로드 함수
+# 청킹된 데이터 로드 함수
 # ---------------------------
 # DB 로드 함수 말고 이걸 사용하도록 main에서 코드 수정 필요
 def load_all_data_from_chunks():
@@ -188,8 +188,8 @@ def generate_qa_pair(text):
 # 메인 실행
 # ---------------------------
 if __name__ == "__main__":
-    NUM_QA = 10    #⭐⭐⭐ 질문 수 저장
-    lecture_reviews, notices_chunks, clubs_chunks = load_all_data() # ⭐⭐⭐ load_all_data_from_chunks()
+    NUM_QA = 1000    #질문 수 저장
+    lecture_reviews, notices_chunks, clubs_chunks = load_all_data() # load_all_data_from_chunks()
     sampled_docs = sample_documents(lecture_reviews, notices_chunks, clubs_chunks, NUM_QA=NUM_QA, ratios=(2,5,3))
 
     dataset = []
@@ -199,9 +199,9 @@ if __name__ == "__main__":
             dataset.append(qa)
 
     os.makedirs("Evaluation/data", exist_ok=True)
-    output_file = "Evaluation/data/ragas_qa_dataset.jsonl"  #⭐⭐⭐ OUTPUT 경로
+    output_file = "Evaluation/data/ragas_qa_dataset.jsonl"  #OUTPUT 경로
     with open(output_file, "w", encoding="utf-8") as f:
         for item in dataset:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
-    print(f"✅ QA 생성 완료! 총 {len(dataset)}개 저장됨 → {output_file}")
+    print(f"QA 생성 완료! 총 {len(dataset)}개 저장됨 → {output_file}")

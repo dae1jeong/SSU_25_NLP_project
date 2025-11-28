@@ -50,7 +50,7 @@ def run_test():
     with open("Evaluation/data/rag_test_results2.json", "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
         
-    print("✅ 실행 완료! 결과 파일: Evaluation/data/rag_test_results.json")
+    print("실행 완료! 결과 파일: Evaluation/data/rag_test_results.json")
 
 if __name__ == "__main__":
     run_test()
