@@ -16,7 +16,7 @@ def run_test():
 
     # 1. 데이터셋 로드
     with open(data_path, "r", encoding="utf-8") as f:
-        all_data = [json.loads(line) for line in f]
+        all_data = [json.loads(line) for line in f if line.strip()]
     
     # 2. 100개 랜덤 샘플링 (비용 절약)
     sample_size = min(100, len(all_data))
@@ -47,10 +47,10 @@ def run_test():
         })
 
     # 5. 결과 저장
-    with open("Evaluation/data/rag_test_results2.json", "w", encoding="utf-8") as f:
+    with open("Evaluation/data/rag_test_results_1129_11.json", "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
         
-    print("실행 완료! 결과 파일: Evaluation/data/rag_test_results.json")
+    print("실행 완료! 결과 파일: Evaluation/data/rag_test_results_1129_4.json")
 
 if __name__ == "__main__":
     run_test()

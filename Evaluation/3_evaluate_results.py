@@ -44,7 +44,7 @@ def evaluate_answer(question, ground_truth, predicted):
         return {"score": 0, "reason": "채점 중 에러 발생"}
 
 def main():
-    input_path = "Evaluation/data/rag_test_results2.json"
+    input_path = "Evaluation/data/rag_test_results_1129_11.json"
     if not os.path.exists(input_path):
         print("❌ 실행 결과 파일이 없습니다. 2번 코드를 먼저 실행하세요.")
         return
@@ -76,7 +76,7 @@ def main():
     print(f"   - 평균 점수: {avg_score:.2f} / 5.0 점")
     
     # 결과 저장
-    with open("Evaluation/data/final_evaluation_report.json", "w", encoding="utf-8") as f:
+    with open("Evaluation/data/evaluation_report_1129_11.json", "w", encoding="utf-8") as f:
         json.dump(evaluated_results, f, ensure_ascii=False, indent=2)
         
     print("채점 완료! 상세 결과: Evaluation/data/final_evaluation_report.json")
