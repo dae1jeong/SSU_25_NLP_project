@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 import json
 import re  # 정규식
+import time
 
 import collections
 import collections.abc
@@ -330,6 +331,18 @@ def build_meal_context() -> str:
     ]
     return "\n".join(context_parts)
 
+# ======================== Eval을 위한 코드 ====================
+# ragas, Recall@K 등 다른 평가를 위한 리턴 타입 정의
+@dataclass
+class EvaluationResult:
+    """RAG 시스템 평가에 필요한 모든 결과를 담는 구조"""
+    query: str                       
+    model_answer: str                
+    retrieved_chunks: List['ChunkDocument'] 
+    context_texts: List[str]         
+    is_rag_flow: bool
+    latency_seconds: float = 0.0 
+
 
 # ==============================================
 # 1. BM25 / RAG 파트
@@ -635,6 +648,86 @@ class RAGPipeline:
         docs = self.retrieve(query, intent=intent, slots=slots or {})
         system_msg, user_msg = self.build_prompt(query, docs)
         return llm_call(system_msg, user_msg)
+
+# ======================== Eval을 위한 코드 ====================
+# ragas, Recall@K 등 다른 평가를 위한 리턴 타입 정의
+def answer_with_llm_EVAL(
+        self,
+        query: str,
+        llm_call: Callable[[str, str], str],
+        intent: str = None,
+        slots: Dict = None,
+    ) -> EvaluationResult: # 💡 리턴 타입: EvaluationResult
+        """
+        평가 작업을 위해 답변 외에 검색된 청크 정보를 포함하여 반환합니다.
+        (기존 answer_with_llm의 로직을 그대로 사용하되, 리턴만 변경)
+        """
+        slots = slots or {}
+
+        # ✅ 1) 질문 문자열만 보고 '학식' 관련 의도 자동 판별
+        if (
+            ("학식" in query)
+            or ("메뉴" in query)
+            or ("밥 뭐" in query)
+            or ("밥 뭐 나와" in query)
+            or ("오늘 밥" in query)
+            or ("생협" in query)
+            or ("기숙사 식당" in query)
+        ):
+            intent = "학식_검색"
+
+        # ✅ 2) 학식 의도면 RAG 말고 실시간 스크래핑 컨텍스트 사용
+        if intent == "학식_검색":
+            meal_context = build_meal_context()
+            system_msg = (
+                "너는 숭실대학교 학식 정보를 알려주는 챗봇이야.\n"
+                "아래 컨텍스트(생협/기숙사 식당 메뉴)를 참고해서, "
+                "사용자 질문에 맞게 오늘의 학식 정보를 간략하고 보기 좋게 정리해서 알려줘.\n"
+                "메뉴 이름, 코너 이름, 가격, 끼니(조식/중식/석식) 등을 정돈해서 한국어로 친절하게 설명해."
+            )
+            user_msg = (
+                f"사용자 질문: {query}\n\n"
+                f"다음은 오늘의 학식 정보야:\n\n{meal_context}"
+            )
+            final_answer = llm_call(system_msg, user_msg)
+            
+            # 💡 EvaluationResult 반환 (RAG flow 아님)
+            return EvaluationResult(
+                query=query,
+                model_answer=final_answer,
+                retrieved_chunks=[],
+                context_texts=[],
+                is_rag_flow=False
+            )
+
+        # ✅ 3) 그 외는 기존 RAG 파이프라인 사용
+        
+        # 1. 검색 결과 확보 (docs 변수에 저장)
+        docs: List[ChunkDocument] = self.retrieve(query, intent=intent, slots=slots)
+        
+        # 2. LLM 호출을 위한 프롬프트 구성
+        system_msg, user_msg = self.build_prompt(query, docs)
+        
+        # 3. LLM 답변 생성
+        start_time = time.time()  # 💡 측정 시작
+        final_answer = llm_call(system_msg, user_msg)
+        end_time = time.time()    # 💡 측정 종료
+
+        latency = end_time - start_time # 💡 소요 시간 (초 단위)
+
+        # 4. RAGAs 'contexts'를 위해 텍스트 목록 추출
+        context_texts = [d.text for d in docs]
+        
+        # 💡 최종적으로 EvaluationResult 객체를 반환
+        return EvaluationResult(
+            query=query,
+            model_answer=final_answer,
+            retrieved_chunks=docs,
+            context_texts=context_texts,
+            is_rag_flow=True,
+            latency_seconds=latency # 💡 새로운 필드 추가
+        )
+
 
 
 # =========================

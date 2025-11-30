@@ -48,22 +48,22 @@ GPT_4O_LLM = ChatOpenAI(model="gpt-4o", temperature=0) # LLM Judge
 OPENAI_EMBEDDINGS = OpenAIEmbeddings(model="text-embedding-3-small") # Embedding Model
 
 # --------------------------------------------------------------------------
-
-def load_jsonl_data(file_path: str) -> list:
-    """JSONL 파일에서 데이터를 읽어와 Python 리스트(Ragas 입력 형식)로 변환합니다."""
-
-    data = []
+def load_full_json_data(file_path: str) -> list:
+    """단일 JSON 파일(리스트 형태)에서 데이터를 읽어옵니다."""
     if not os.path.exists(file_path):
         print(f"오류: 입력 파일을 찾을 수 없습니다: {file_path}")
         return []
 
-    print(f"-> JSONL 파일 로드 시작: {file_path}")
+    print(f"-> JSON 파일 로드 시작: {file_path}")
     with open(file_path, 'r', encoding='utf-8') as f:
-        for line in tqdm(f, desc="JSONL 로드"):
-            try:
-                data.append(json.loads(line.strip()))
-            except json.JSONDecodeError as e:
-                print(f"오류: JSONL 파일 파싱 오류 발생. 라인: {line.strip()}. 오류: {e}")
+        try:
+            # 💡 JSONL이 아닌, 전체 파일을 한 번에 로드 (단일 리스트)
+            data = json.load(f) 
+        except json.JSONDecodeError as e:
+            print(f"오류: JSON 파일 파싱 오류 발생. 오류: {e}")
+            return []
+    
+    print(f"-> 총 {len(data)}개 샘플 로드 완료.")
     return data
 
 def safe_save_csv(df: pd.DataFrame, file_path: str):
@@ -93,19 +93,26 @@ def safe_save_csv(df: pd.DataFrame, file_path: str):
 
 def evaluate_ragas_dataset_to_dataframe(ragas_input_data: list) -> pd.DataFrame:
 
-    print("1. Ragas 입력 데이터 전처리 시작...")
+    print("1. Ragas 입력 데이터 전처리 및 매핑 시작...")
     
-    # (데이터 전처리 로직은 동일)
+    # RAGAs가 요구하는 필드 구조
     processed_data = {
-        "question": [], "answer": [], "contexts": [], "ground_truths": []
+        "question": [], 
+        "answer": [], 
+        "contexts": [],       # 💡 List[str] 형태여야 함
+        "ground_truths": []   # 💡 List[str] 형태여야 함
     }
     
     for item in ragas_input_data:
+        # 💡 RAGAs 요구 사항에 맞게 필드 매핑
         processed_data["question"].append(item["question"])
-        processed_data["answer"].append(item["answer"])
-        context_texts = [ctx['text'] for ctx in item["contexts"]]
-        processed_data["contexts"].append(context_texts)
-        processed_data["ground_truths"].append(item["ground_truths"]) 
+        processed_data["answer"].append(item["model_answer"]) # 'answer' 대신 'model_answer' 사용
+
+        # 💡 contexts 필드는 이미 List[str] 형태로 저장된 'context_texts'를 사용
+        processed_data["contexts"].append(item["context_texts"])
+        
+        # 💡 ground_truths는 RAGAs가 List[str]을 요구하므로 단일 문자열을 리스트로 감쌈
+        processed_data["ground_truths"].append([item["ground_truth"]]) 
         
     dataset = Dataset.from_dict(processed_data)
     
@@ -137,14 +144,18 @@ def evaluate_ragas_dataset_to_dataframe(ragas_input_data: list) -> pd.DataFrame:
     print(result)
     print("\n✅ 샘플별 상세 평가 결과 DataFrame 반환.")
     
-    return result_df
+    return result.to_pandas()
 
 # --------------------------------------------------------------------------
 
 if __name__ == "__main__":
     
-    # 1. JSONL 파일 로드
-    ragas_data = load_jsonl_data(RAGAS_INPUT_PATH)
+    # 💡 RAGAs 입력 경로를 직전에 저장한 FULL JSON 파일 경로로 변경
+    # RAGAS_INPUT_PATH = "/Evaluation/data/ragas_qa_dataset.jsonl" 
+    RAGAS_INPUT_PATH = "Evaluation/data/rag_evaluation_results_full.json" 
+    
+    # 1. JSON 파일 로드 (함수 이름도 load_full_json_data로 변경)
+    ragas_data = load_full_json_data(RAGAS_INPUT_PATH)
     
     if not ragas_data:
         print("로드된 데이터가 없어 Ragas 평가를 종료합니다.")

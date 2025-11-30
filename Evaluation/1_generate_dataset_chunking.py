@@ -122,13 +122,14 @@ def load_all_data_from_chunks():
             item = json.loads(line.strip())
             text = item['text']
             source = item['metadata']['source']
+            chunk_id = item['id']  # 수정된 부분....... text, chunk_id를 함께 반환하도록.
 
             if source == "lecture_review":
-                lecture_reviews.append(text)
+                lecture_reviews.append((text, chunk_id))
             elif source == "notice":
-                notices_chunks.append(text)
+                notices_chunks.append((text, chunk_id))
             elif source == "club":
-                clubs_chunks.append(text)
+                clubs_chunks.append((text, chunk_id))
     
     return lecture_reviews, notices_chunks, clubs_chunks
 
@@ -178,7 +179,7 @@ def generate_qa_pair(text):
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=0.5  # 창의적인 정도
+            temperature=0.7  # 창의적인 정도
         )
         return json.loads(response.choices[0].message.content)
     except Exception:
@@ -189,13 +190,16 @@ def generate_qa_pair(text):
 # ---------------------------
 if __name__ == "__main__":
     NUM_QA = 10    #질문 수 저장
-    lecture_reviews, notices_chunks, clubs_chunks = load_all_data() # load_all_data_from_chunks()
+    lecture_reviews, notices_chunks, clubs_chunks = load_all_data_from_chunks() # load_all_data_from_chunks()
     sampled_docs = sample_documents(lecture_reviews, notices_chunks, clubs_chunks, NUM_QA=NUM_QA, ratios=(2,5,3))
 
     dataset = []
-    for doc in tqdm(sampled_docs, desc="QA 생성중"):
-        qa = generate_qa_pair(doc)
+    for doc_tuple in tqdm(sampled_docs, desc="QA 생성중"):
+        text, chunk_id = doc_tuple # 💡 수정 2: 튜플에서 text와 chunk_id를 분리
+        qa = generate_qa_pair(text)
         if qa:
+            # 💡 수정 3: 생성된 QA 쌍에 chunk_id를 추가
+            qa['ground_truth_chunk_id'] = chunk_id
             dataset.append(qa)
 
     os.makedirs("Evaluation/data", exist_ok=True)
