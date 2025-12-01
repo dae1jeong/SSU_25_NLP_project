@@ -57,65 +57,91 @@ def run_test():
     # 3. RAG 엔진 로딩
     rag = RAGPipeline()
     results = []
+
     
     # 4. 문제 풀기
     for item in tqdm(test_samples):
         question = item['question']
         ground_truth = item['ground_truth']
-        # 💡 Recall/MRR/RRF 평가를 위해 ground_truth_chunk_id를 가져옵니다.
-        # 이 필드가 없으면 Recall/MRR/RRF는 계산 불가능합니다.
-        ground_truth_chunk_id = item.get('ground_truth_chunk_id')
+
         
         # 챗봇에게 질문 던지기
         try:
-            # 💡 평가 전용 함수 호출
-            eval_result: EvaluationResult = rag.answer_with_llm_EVAL(
-                question, 
-                llm_call=call_openai_api
-            )
+            model_answer = rag.answer_with_llm(question, llm_call=call_openai_api)
         except Exception as e:
-            # 에러 발생 시 EvaluationResult 형태로 저장
-            eval_result = EvaluationResult(
-                query=question,
-                model_answer=f"에러 발생: {e}",
-                retrieved_chunks=[],
-                context_texts=[],
-                is_rag_flow=False
-            )
-        
-        # 💡 EvaluationResult 객체를 JSON 저장을 위한 딕셔너리로 변환
-        
-        # ChunkDocument 객체는 JSON으로 바로 저장이 안 되므로 딕셔너리로 변환합니다.
-        retrieved_chunks_data = [
-            {
-                "id": d.id, 
-                "text": d.text, 
-                "meta": d.meta
-            } 
-            for d in eval_result.retrieved_chunks
-        ]
+            model_answer=f"에러 발생: {e}"
+    
         
         # 모든 평가 지표 계산에 필요한 원천 데이터를 results에 저장
         results.append({
             "question": question,
             "ground_truth": ground_truth,
-            "ground_truth_chunk_id": ground_truth_chunk_id, # Recall/MRR/RRF 기준점
-            
-            # --- 모델의 출력 및 검색 결과 ---
-            "model_answer": eval_result.model_answer,
-            "is_rag_flow": eval_result.is_rag_flow,
-            "retrieved_chunks": retrieved_chunks_data, 
-            "context_texts": eval_result.context_texts, # RAGAs 입력용 텍스트 목록
-            "latency_seconds": eval_result.latency_seconds # 💡 여기 추가!
+            "model_answer": model_answer
         })
 
-    # 5. 결과 저장
-    # 💡 결과 파일 이름을 명확하게 변경합니다.
-    output_filename = "Evaluation/data/rag_evaluation_results_full.json"
-    with open(output_filename, "w", encoding="utf-8") as f:
+    with open("Evaluation/data/rag_test_results_1129_11.json", "w", encoding="utf-8") as f:
+        print("실행 완료! 결과 파일: Evaluation/data/rag_test_results_1129_4.json")
         json.dump(results, f, ensure_ascii=False, indent=2)
+
+    
+    # # 4. 문제 풀기
+    # for item in tqdm(test_samples):
+    #     question = item['question']
+    #     ground_truth = item['ground_truth']
+    #     # 💡 Recall/MRR/RRF 평가를 위해 ground_truth_chunk_id를 가져옵니다.
+    #     # 이 필드가 없으면 Recall/MRR/RRF는 계산 불가능합니다.
+    #     ground_truth_chunk_id = item.get('ground_truth_chunk_id')
         
-    print(f"실행 완료! 결과 파일: {output_filename}")
+    #     # 챗봇에게 질문 던지기
+    #     try:
+    #         # 💡 평가 전용 함수 호출
+    #         eval_result: EvaluationResult = rag.answer_with_llm_EVAL(
+    #             question, 
+    #             llm_call=call_openai_api
+    #         )
+    #     except Exception as e:
+    #         # 에러 발생 시 EvaluationResult 형태로 저장
+    #         eval_result = EvaluationResult(
+    #             query=question,
+    #             model_answer=f"에러 발생: {e}",
+    #             retrieved_chunks=[],
+    #             context_texts=[],
+    #             is_rag_flow=False
+    #         )
+        
+    #     # 💡 EvaluationResult 객체를 JSON 저장을 위한 딕셔너리로 변환
+        
+    #     # ChunkDocument 객체는 JSON으로 바로 저장이 안 되므로 딕셔너리로 변환합니다.
+    #     retrieved_chunks_data = [
+    #         {
+    #             "id": d.id, 
+    #             "text": d.text, 
+    #             "meta": d.meta
+    #         } 
+    #         for d in eval_result.retrieved_chunks
+    #     ]
+        
+    #     # 모든 평가 지표 계산에 필요한 원천 데이터를 results에 저장
+    #     results.append({
+    #         "question": question,
+    #         "ground_truth": ground_truth,
+    #         "ground_truth_chunk_id": ground_truth_chunk_id, # Recall/MRR/RRF 기준점
+            
+    #         # --- 모델의 출력 및 검색 결과 ---
+    #         "model_answer": eval_result.model_answer,
+    #         "is_rag_flow": eval_result.is_rag_flow,
+    #         "retrieved_chunks": retrieved_chunks_data, 
+    #         "context_texts": eval_result.context_texts, # RAGAs 입력용 텍스트 목록
+    #         "latency_seconds": eval_result.latency_seconds # 💡 여기 추가!
+    #     })
+
+    # # 5. 결과 저장
+    # # 💡 결과 파일 이름을 명확하게 변경합니다.
+    # output_filename = "Evaluation/data/rag_evaluation_results_full.json"
+    # with open(output_filename, "w", encoding="utf-8") as f:
+    #     json.dump(results, f, ensure_ascii=False, indent=2)
+        
+    # print(f"실행 완료! 결과 파일: {output_filename}")
 
 if __name__ == "__main__":
     run_test()

@@ -137,7 +137,7 @@ def load_all_data_from_chunks():
 # ---------------------------
 # 랜덤 샘플링 (비율 맞춤)
 # ---------------------------
-def sample_documents(lecture_reviews, notices_chunks, clubs_chunks, NUM_QA=10, ratios=(2,5,3)):
+def sample_documents(lecture_reviews, notices_chunks, clubs_chunks, NUM_QA=10, ratios=(3,4,3)):
     total_ratio = sum(ratios)
     num_lecture = round(NUM_QA * ratios[0] / total_ratio)
     num_notice = round(NUM_QA * ratios[1] / total_ratio)
@@ -159,7 +159,8 @@ def sample_documents(lecture_reviews, notices_chunks, clubs_chunks, NUM_QA=10, r
 # ---------------------------
 def generate_qa_pair(text):
     prompt = f"""
-    아래 텍스트를 읽고, 챗봇 사용자가 물어볼 만한 자연스러운 질문과 그에 대한 정답 1개를 생성해줘.
+    아래 텍스트를 읽고, **챗봇 사용자가 물어볼 만한 자연스러운 질문 3개**와 그에 대한 **동일한 정답 1개**를 생성해줘.
+    질문 3개는 구조, 어조, 표현 방식이 서로 다르게 구성되어야 합니다.
     정답은 반드시 제공된 텍스트에 있는 내용만 기반해야 합니다.
 
     [텍스트]:
@@ -167,7 +168,11 @@ def generate_qa_pair(text):
 
     [출력 JSON]:
     {{
-        "question": "생성된 질문",
+        "questions": [
+            "질문 1 (예: 직설적 구문)", 
+            "질문 2 (예: 구어체나 오타 포함)", 
+            "질문 3 (예: 확인/요청형 구문)"
+        ], 
         "ground_truth": "텍스트 내용을 바탕으로 한 정답"
     }}
     """
@@ -189,21 +194,33 @@ def generate_qa_pair(text):
 # 메인 실행
 # ---------------------------
 if __name__ == "__main__":
-    NUM_QA = 10    #질문 수 저장
+    NUM_QA = 100    #질문 수 저장
     lecture_reviews, notices_chunks, clubs_chunks = load_all_data_from_chunks() # load_all_data_from_chunks()
     sampled_docs = sample_documents(lecture_reviews, notices_chunks, clubs_chunks, NUM_QA=NUM_QA, ratios=(2,5,3))
 
     dataset = []
     for doc_tuple in tqdm(sampled_docs, desc="QA 생성중"):
         text, chunk_id = doc_tuple # 💡 수정 2: 튜플에서 text와 chunk_id를 분리
-        qa = generate_qa_pair(text)
-        if qa:
-            # 💡 수정 3: 생성된 QA 쌍에 chunk_id를 추가
-            qa['ground_truth_chunk_id'] = chunk_id
-            dataset.append(qa)
+        qa_response = generate_qa_pair(text)
+
+        # 3. 응답 분리(Flatten) 및 저장 💡 이 부분이 핵심 수정 사항
+        if qa_response and 'questions' in qa_response and 'ground_truth' in qa_response:
+            
+            ground_truth = qa_response['ground_truth']
+            questions = qa_response['questions']
+            
+            # questions 리스트를 반복하며 질문(Query)별로 분리하여 저장
+            for question in questions:
+                # 하나의 QA 쌍(질문 1개, 정답 1개) 형태로 dataset에 추가
+                dataset.append({
+                    'question': question,
+                    'ground_truth': ground_truth,
+                    # RAG 평가를 위해 원본 청크 ID도 저장
+                    'ground_truth_chunk_id': chunk_id  # 💡 수정 3: 생성된 QA 쌍에 chunk_id를 추가
+                })
 
     os.makedirs("Evaluation/data", exist_ok=True)
-    output_file = "Evaluation/data/ragas_qa_dataset2.jsonl"  #OUTPUT 경로
+    output_file = "Evaluation/data/ragas_qa_dataset_withID.jsonl"  #OUTPUT 경로
     with open(output_file, "w", encoding="utf-8") as f:
         for item in dataset:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
