@@ -1,3 +1,19 @@
+# ==============================================================================
+# SSU_25_NLP_project - main.py
+#
+# [개요]
+# 이 파일은 프로젝트의 메인 실행 파일이자, FastAPI 기반의 웹 서버 역할을 합니다.
+# 전체 서비스의 진입점(Entry Point)이며, 모든 사용자 요청(페이지 로딩, API 호출)을 처리합니다.
+#
+# [주요 역할]
+# 1. 서버 구축: FastAPI를 사용하여 백엔드 API 및 웹 페이지 라우터를 설정합니다.
+# 2. RAG 엔진 관리: RAGPipeline 인스턴스를 'Lazy Loading'  방식으로 관리합니다.
+#    - 'get_rag_engine()' 함수를 통해 첫 질문이 들어왔을 때만 무거운 RAG 엔진을 로드하여,
+#      서버 시작 시간을 단축하고 메모리 효율을 높입니다.
+# 3. 모듈 통합: 인증 라우터(login/auth/routes)와 최종 RAG 파이프라인을 통합하여 API를 제공합니다.
+# 4. 챗봇 API: '/api/ask' 엔드포인트를 통해 사용자 질문을 RAG 엔진으로 전달하고, 답변을 JSON으로 반환합니다.
+# ==============================================================================
+
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
