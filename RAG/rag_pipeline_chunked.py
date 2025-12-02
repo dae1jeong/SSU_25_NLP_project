@@ -1,3 +1,25 @@
+# ==============================================================================
+# SSU_25_NLP_project - RAG/rag_pipeline_chunked.py
+#
+# [개요]
+# 이 파일은 RAG 챗봇의 최종 완성 버전으로, 프로젝트의 핵심 기술인
+# '하이브리드 검색'을 구현한 메인 파이프라인 클래스입니다.
+# main.py에서 이 클래스를 로드하여 서비스에 사용합니다.
+#
+# [주요 특징]
+# 1. 하이브리드 검색: BM25 검색과 벡터 검색을 동시에 수행.
+# 2. RRF 융합: 두 검색 결과를 RRF(Reciprocal Rank Fusion) 알고리즘으로 통합하여 최적의 문서 확보.
+# 3. NLU 필터링: NLU가 파악한 의도(Intent) 및 개체명(Slot)을 사용해 검색 결과를 필터링.
+# 4. 실시간 기능: 학식 관련 질문은 RAG를 건너뛰고 실시간 웹 스크래핑을 통해 즉시 응답.
+#
+# [사용 DB]
+# - BM25DBRetriever: bm25_tokens.db (BM25 전용)
+# - Vector Search: chroma_db (벡터 전용)
+# ==============================================================================
+
+
+
+
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Callable
@@ -449,7 +471,7 @@ class RAGPipeline:
             res = self.chroma_collection.query(
                 query_embeddings=query_emb.tolist(),
                 n_results=top_k,
-                include=["metadatas"],   # 🔥 ids는 최신버전에서 제거됨
+                include=["metadatas"],   # 🔥 ids는 최신버전에서 제거됨 
             )
         except Exception as e:
             print(f"[Chroma] vector_search 실패: {e}")
