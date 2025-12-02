@@ -1,6 +1,3 @@
-#data.py를 통해 크롤링한 데이터를 1차적으로 전처리하고 처리한 데이터 베이스에서 데이트를 로드
-#SentenceTransformer 모델을 이용해 모든 텍스트를 벡터로 변환
-#변환된 벡터와 원본 테스트의 메타데이터를 벡터 db에 저장
 
 # ==============================================================================
 # SSU_25_NLP_project - data/vector_db.py
@@ -12,20 +9,13 @@
 # [처리 흐름]
 # # 1. (Load) SQLite DB에서 3가지 데이터(강의평, 공지사항, 동아리)를 로드합니다.
 # # 2. (Chunking) 긴 텍스트(공지사항, 동아리)는 검색 정확도를 위해 작은 단위로 쪼갭니다.
-# -> chunked_db.py의 결과인 chunked_data.jsonl
-
-# ------> 여기서부터 시작
-# 3. (Embedding) SBERT 모델을 사용해 텍스트를 768차원 숫자 벡터로 변환합니다.
-# 4. (Save) 벡터와 메타데이터를 ChromaDB에 저장합니다. (대용량 배치 처리 포함)
+#   -> chunked_db.py의 결과인 chunked_data.jsonl
+# 3. SBERT 모델을 사용해 텍스트를 768차원 숫자 벡터로 변환합니다.
+# 4. 벡터와 메타데이터를 ChromaDB에 저장합니다. (대용량 배치 처리 포함)
 # ==============================================================================
 
 
-# ======================================================================
-# vector_db.py
-#
-# 역할: chunked_data.jsonl에서 청킹된 텍스트를 로드하고
-#       SentenceTransformer를 이용해 임베딩 후 ChromaDB에 저장
-# ======================================================================
+
 
 import json
 import os
@@ -93,7 +83,7 @@ def main():
     model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
     embeddings = model.encode(new_docs, show_progress_bar=True, batch_size=32)
     
-    # 5. ChromaDB 저장 (배치 처리)
+    # 5. ChromaDB 저장 
     total_items = len(new_ids)
     for i in range(0, total_items, CHROMA_ADD_BATCH_SIZE):
         end_idx = min(i + CHROMA_ADD_BATCH_SIZE, total_items)

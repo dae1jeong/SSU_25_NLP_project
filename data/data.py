@@ -1,14 +1,9 @@
-#원본데이터를 db에 저장하는 코드
-#크롤링 폴더에서 원본 파일 로드 후 불필요한 텍스트 제거, 공백 정리 등 전처리 수행
-#정제된 데이터를 SQLITE DB에 저장
-
-
 
 # ==============================================================================
-# SSU_25_NLP_project - data.py (v5.1 - 최종 완성본)
+# SSU_25_NLP_project - data.py 
 #
 # [개요]
-# 이 스크립트는 챗봇의 '장기 기억(Long-term Memory)'이 될 원본 데이터베이스를 구축하는
+# 이 스크립트는 챗봇의 '장기 기억'이 될 원본 데이터베이스를 구축하는
 # ETL(Extract, Transform, Load) 파이프라인의 핵심 코드입니다.
 # 흩어져 있는 JSONL 데이터 파일들을 읽어와 정제한 뒤, 하나의 SQLite DB로 통합합니다.
 #
@@ -23,10 +18,7 @@
 #    - 파일: everytime_crawling/everytime_club_parsed.jsonl
 #    - 내용: 동아리명(title), 소개글(all_text), 원본 링크
 #
-# [실행 결과]
-# - 'ssu_chatbot_data.db' 파일이 생성됩니다. (SQLite)
-# - 이 DB는 이후 'vector_db.py'와 'build_bm25.py'에서 검색 인덱스를 만드는 데 사용됩니다.
-# ==============================================================================
+
 
 import sqlite3
 import json
@@ -162,7 +154,7 @@ def process_clubs(raw_data):
     processed_list = []
     for item in raw_data:
         try:
-            # 1. 데이터 추출 (None이면 빈 문자열로 변환 후 strip)
+            # 1. 데이터 추출 
             raw_title = item.get('title')
             club_name = str(raw_title).strip() if raw_title else "제목 없음"
             
@@ -200,7 +192,7 @@ def process_clubs(raw_data):
     print(f" -> [OK] 동아리 {len(processed_list)}건 처리 완료")
     return processed_list
 
-# --- 4단계: 데이터베이스에 저장하는 함수 ---
+#  4단계: 데이터베이스에 저장하는 함수 
 def save_data_to_db(db_path, processed_reviews, processed_notices, processed_clubs):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()

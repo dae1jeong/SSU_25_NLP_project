@@ -1,4 +1,20 @@
-# vector_db.py의 chunking part 
+# ==============================================================================
+# SSU_25_NLP_project - chunked_db.py
+#
+# [개요]
+# 'data.py'가 생성한 원본 SQLite DB의 긴 텍스트 문서들을 검색 효율을 위해
+# 작은 단위의 '청크'로 분할하고 JSONL 파일로 출력하는 스크립트입니다.
+#
+# [주요 역할]
+# 1. 문서 분할: LangChain의 RecursiveCharacterTextSplitter를 사용하여 문서를 쪼갬.
+#    - 설정: CHUNK_SIZE=400, CHUNK_OVERLAP=50
+# 2. 메타데이터 부여: 각 청크에 원본 출처(source), 제목, link 등의 메타데이터를 부여.
+# 3. 중간 저장: 분할된 모든 청크를 'chunked_data.jsonl' 파일로 저장 (BM25/Vector DB의 입력).
+#
+# [처리 흐름]
+# SQLite DB 로드 -> Text Splitter 적용 -> JSONL 파일 저장
+# ==============================================================================
+
 
 import sqlite3
 from langchain_text_splitters import RecursiveCharacterTextSplitter
