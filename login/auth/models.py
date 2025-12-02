@@ -10,6 +10,8 @@
 # 2. VerifyRequest: 인증 코드 확인 요청 시 사용 (이메일 + 6자리 코드)
 # 3. ChatRequest: 챗봇 API (/api/ask) 호출 시 사용 (질문 텍스트)
 # ==============================================================================
+# 작업자 : 박대정
+
 from pydantic import BaseModel, EmailStr
 
 class EmailRequest(BaseModel):

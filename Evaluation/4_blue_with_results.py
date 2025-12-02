@@ -1,5 +1,7 @@
 #  rag_test_results_1129_*
 # 1~11까지 blue score print
+# 작업자 : 박채은
+
 import json
 import sacrebleu
 import os

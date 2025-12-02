@@ -11,7 +11,7 @@
 # 3. 인증 확인 API: '/verify-code' 요청을 받아 사용자가 입력한 코드가 DB의 코드와 일치하는지 확인합니다.
 #    - 인증 성공 시 채팅방 페이지('/chat')로 리다이렉트합니다.
 # ==============================================================================
-
+# 작업자 : 박대정
 
 from fastapi import APIRouter, HTTPException, status, Form
 from fastapi.responses import RedirectResponse

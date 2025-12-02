@@ -18,7 +18,7 @@
 #    - 파일: everytime_crawling/everytime_club_parsed.jsonl
 #    - 내용: 동아리명(title), 소개글(all_text), 원본 링크
 #
-
+# 작업자 : 권은이(보완 및 동아리 파트 업데이트), 박원형(설계 및 구축)
 
 import sqlite3
 import json

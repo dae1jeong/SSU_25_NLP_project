@@ -14,7 +14,7 @@
 # [처리 흐름]
 # SQLite DB 로드 -> Text Splitter 적용 -> JSONL 파일 저장
 # ==============================================================================
-
+# 작업자 : 박채은(구조 분리 및 보완), 박원형(설계 및 구축)
 
 import sqlite3
 from langchain_text_splitters import RecursiveCharacterTextSplitter

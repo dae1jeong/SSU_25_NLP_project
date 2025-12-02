@@ -1,3 +1,5 @@
+# 작업자 : 박대정
+
 import json
 import os
 from openai import OpenAI

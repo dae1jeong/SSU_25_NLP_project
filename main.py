@@ -13,6 +13,7 @@
 # 3. 모듈 통합: 인증 라우터(login/auth/routes)와 최종 RAG 파이프라인을 통합하여 API를 제공합니다.
 # 4. 챗봇 API: '/api/ask' 엔드포인트를 통해 사용자 질문을 RAG 엔진으로 전달하고, 답변을 JSON으로 반환합니다.
 # ==============================================================================
+# 작업자 : 박대정 
 
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse

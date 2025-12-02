@@ -12,7 +12,7 @@ import numpy as np
 # 3. RRF (Reciprocal Rank Fusion, 역순위 융합)는 
 # 여러 독립적인 검색 시스템의 순위 목록을 효과적으로 결합하여 
 # 최종 순위를 결정하기 위해 사용되는 점수 체계입니다. 
-
+# 작업자 : 박채은
 
 def calculate_retrieval_metrics_with_latency(results_path: str, K: int = 5):
     """

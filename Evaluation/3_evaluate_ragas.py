@@ -5,7 +5,7 @@
 
 # 주의사항
 # rag_pipeline.py 파일에서 415~ Line 주석을 해제해야함.
-
+# 작업자 : 박채은
 """
     ragas_input_path: run_rag_test.py 돌린 결과물 경로
     ragas input 형태
