@@ -1,3 +1,18 @@
+# ==============================================================================
+# SSU_25_NLP_project - login/auth/routes.py
+#
+# [개요]
+# FastAPI 서버에서 인증(로그인) 관련 API 엔드포인트를 정의하는 라우터 파일입니다.
+#
+# [주요 역할]
+# 1. DB 연결: MongoDB(AsyncIOMotorClient)에 연결하여 인증 코드를 저장/관리합니다.
+# 2. 코드 발송 API: '/send-code' 요청을 받아 인증 코드를 생성, DB에 저장하고 이메일로 발송합니다.
+#    - 인증 코드는 5분 유효하며, 만료 시간이 설정됩니다.
+# 3. 인증 확인 API: '/verify-code' 요청을 받아 사용자가 입력한 코드가 DB의 코드와 일치하는지 확인합니다.
+#    - 인증 성공 시 채팅방 페이지('/chat')로 리다이렉트합니다.
+# ==============================================================================
+
+
 from fastapi import APIRouter, HTTPException, status, Form
 from fastapi.responses import RedirectResponse
 from motor.motor_asyncio import AsyncIOMotorClient
